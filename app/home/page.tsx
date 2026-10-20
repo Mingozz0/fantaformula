@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { NavigationLink as Link, SubmitButton } from '@/app/components/action-feedback';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { scoreEvent, type DriverResult, type FantasyLineup, type ScoringRules } from '@/lib/scoring';
@@ -6,6 +6,7 @@ import { activateLeague, assignTeamDraft, createLeague, deleteTeamDraft, joinLea
   saveLineup, saveTeam, saveTeamDraft, signOut } from './actions';
 
 type League = { id: string; name: string; season_id: number; status: string; invite_code: string };
+type Membership = { league_id: string; role: string; leagues: League };
 type Member = { user_id: string; role: string };
 type Profile = { id: string; display_name: string };
 type Team = { id: string; league_id: string; user_id: string; name: string; constructor_id: number;
@@ -13,7 +14,7 @@ type Team = { id: string; league_id: string; user_id: string; name: string; cons
 type TeamDraft = { id: string; league_id: string; player_name: string; name: string; constructor_id: number;
   driver_one_id: number; driver_two_id: number; driver_three_id: number };
 type Driver = { id: number; first_name: string; last_name: string };
-type Constructor = { id: number; canonical_name: string };
+type SeasonDriver = { driver_id: number; drivers: Driver };
 type Race = { id: number; round: number; name: string; race_date: string | null;
   lineup_deadline_at: string | null; has_sprint: boolean; gp_published: boolean; sprint_published: boolean };
 type Lineup = FantasyLineup & { id: string; fantasy_team_id: string; race_id: number; retroactive: boolean };
@@ -45,13 +46,13 @@ export default async function HomePage({ searchParams }: {
   const { data: auth } = await supabase.auth.getClaims();
   const userId = auth?.claims?.sub;
   if (!userId) redirect('/');
-  const { data: memberships } = await supabase.from('league_members').select('league_id,role').eq('user_id', userId);
-  const leagueIds = (memberships ?? []).map((item) => item.league_id);
-  const [{ data: leaguesData }, { data: managerData }] = await Promise.all([
-    leagueIds.length ? supabase.from('leagues').select('*').in('id', leagueIds) : Promise.resolve({ data: [] }),
+  const [{ data: membershipsData, error: membershipsError }, { data: managerData }] = await Promise.all([
+    supabase.from('league_members').select('league_id,role,leagues!inner(id,name,season_id,status,invite_code)').eq('user_id', userId),
     supabase.from('game_managers').select('user_id').eq('user_id', userId).maybeSingle(),
   ]);
-  const leagues = (leaguesData ?? []) as League[];
+  if (membershipsError) throw new Error('Impossibile caricare le leghe. Riprova tra poco.');
+  const memberships = (membershipsData ?? []) as unknown as Membership[];
+  const leagues = memberships.map((membership) => membership.leagues);
   const selected = leagues.find((league) => league.id === params.league) ?? leagues[0];
   const tab = ['overview', 'team', 'lineup', 'standings', 'results', 'manage'].includes(params.tab ?? '')
     ? params.tab! : 'overview';
@@ -61,40 +62,40 @@ export default async function HomePage({ searchParams }: {
         <p className="mt-2 text-zinc-600">Crea una lega 2026 o inserisci il codice ricevuto da un amico.</p>
         <LeagueForms /></div></div></main>;
 
-  const [{ data: membersData }, { data: teamsData }, { data: seasonDriversData },
-    { data: constructorsData }, { data: racesData }, { data: rulesData }] = await Promise.all([
-    supabase.from('league_members').select('user_id,role').eq('league_id', selected.id),
-    supabase.from('fantasy_teams').select('*').eq('league_id', selected.id),
-    supabase.from('season_drivers').select('driver_id,constructor_id').eq('season_id', selected.season_id),
-    supabase.from('season_constructors').select('constructor_id,display_name').eq('season_id', selected.season_id),
-    supabase.from('races').select('*').eq('season_id', selected.season_id).order('round'),
-    supabase.from('season_scoring_rules').select('*').eq('season_id', selected.season_id).maybeSingle(),
-  ]);
-  const members = (membersData ?? []) as Member[];
-  const isAdmin = (memberships ?? []).some((membership) =>
+  const isAdmin = memberships.some((membership) =>
     membership.league_id === selected.id && membership.role === 'admin');
-  const teams = (teamsData ?? []) as Team[];
-  const seasonDrivers = seasonDriversData ?? [];
-  const constructorRows = constructorsData ?? [];
-  const races = (racesData ?? []) as Race[];
-  const driverIds = seasonDrivers.map((row) => row.driver_id);
-  const constructorIds = constructorRows.map((row) => row.constructor_id);
-  const [{ data: profilesData }, { data: driversData }, { data: constructorsRaw },
+  const needsScores = ['overview', 'standings', 'results'].includes(tab);
+  const needsDrivers = ['team', 'lineup', 'results', 'manage'].includes(tab);
+  const needsConstructors = ['team', 'results', 'manage'].includes(tab);
+  const needsRaces = needsScores || tab === 'lineup';
+  const emptyRows = { data: [] };
+  const [{ data: membersData }, { data: teamsData }, { data: seasonDriversData },
+    { data: constructorsData }, { data: racesData }, { data: rulesData },
     { data: lineupsData }, { data: gpData }, { data: sprintData }, { data: pitData },
     { data: draftsData }] = await Promise.all([
-    members.length ? supabase.from('profiles').select('id,display_name').in('id', members.map((m) => m.user_id)) : Promise.resolve({ data: [] }),
-    driverIds.length ? supabase.from('drivers').select('id,first_name,last_name').in('id', driverIds) : Promise.resolve({ data: [] }),
-    constructorIds.length ? supabase.from('constructors').select('id,canonical_name').in('id', constructorIds) : Promise.resolve({ data: [] }),
-    supabase.from('lineups').select('*').eq('league_id', selected.id),
-    supabase.from('race_driver_results').select('*').eq('season_id', selected.season_id),
-    supabase.from('sprint_driver_results').select('*').eq('season_id', selected.season_id),
-    supabase.from('race_constructor_results').select('*').eq('season_id', selected.season_id),
-    isAdmin ? supabase.from('team_drafts').select('*').eq('league_id', selected.id).order('created_at')
-      : Promise.resolve({ data: [] }),
+    supabase.from('league_members').select('user_id,role').eq('league_id', selected.id),
+    supabase.from('fantasy_teams').select('*').eq('league_id', selected.id),
+    needsDrivers ? supabase.from('season_drivers').select('driver_id,drivers!inner(id,first_name,last_name)')
+      .eq('season_id', selected.season_id) : emptyRows,
+    needsConstructors ? supabase.from('season_constructors').select('constructor_id,display_name')
+      .eq('season_id', selected.season_id) : emptyRows,
+    needsRaces ? supabase.from('races').select('id,round,name,race_date,lineup_deadline_at,has_sprint,gp_published,sprint_published')
+      .eq('season_id', selected.season_id).order('round') : emptyRows,
+    needsScores ? supabase.from('season_scoring_rules').select('*').eq('season_id', selected.season_id).maybeSingle() : { data: null },
+    needsScores || tab === 'lineup' ? supabase.from('lineups').select('*').eq('league_id', selected.id) : emptyRows,
+    needsScores ? supabase.from('race_driver_results').select('*').eq('season_id', selected.season_id) : emptyRows,
+    needsScores ? supabase.from('sprint_driver_results').select('*').eq('season_id', selected.season_id) : emptyRows,
+    needsScores ? supabase.from('race_constructor_results').select('*').eq('season_id', selected.season_id) : emptyRows,
+    isAdmin && tab === 'manage' ? supabase.from('team_drafts').select('*').eq('league_id', selected.id).order('created_at') : emptyRows,
   ]);
+  const members = (membersData ?? []) as Member[];
+  const teams = (teamsData ?? []) as Team[];
+  const constructorRows = constructorsData ?? [];
+  const races = (racesData ?? []) as Race[];
+  const { data: profilesData } = members.length
+    ? await supabase.from('profiles').select('id,display_name').in('id', members.map((m) => m.user_id)) : emptyRows;
   const profiles = (profilesData ?? []) as Profile[];
-  const drivers = (driversData ?? []) as Driver[];
-  const constructors = (constructorsRaw ?? []) as Constructor[];
+  const drivers = ((seasonDriversData ?? []) as unknown as SeasonDriver[]).map((row) => row.drivers);
   const lineups = (lineupsData ?? []) as Lineup[];
   const gpResults = (gpData ?? []) as RaceResult[];
   const sprintResults = (sprintData ?? []) as RaceResult[];
@@ -105,7 +106,7 @@ export default async function HomePage({ searchParams }: {
   const membersWithoutTeam = members.filter((member) => !teams.some((team) => team.user_id === member.user_id));
   const driverName = (id: number) => { const d = drivers.find((item) => item.id === id); return d ? `${d.first_name} ${d.last_name}` : `Pilota ${id}`; };
   const constructorName = (id: number) => constructorRows.find((item) => item.constructor_id === id)?.display_name
-    ?? constructors.find((item) => item.id === id)?.canonical_name ?? `Scuderia ${id}`;
+    ?? `Scuderia ${id}`;
   const ownerName = (id: string) => profiles.find((item) => item.id === id)?.display_name ?? 'Partecipante';
   const now = await currentTime();
   const nextRace = races.find((race) => race.lineup_deadline_at && Date.parse(race.lineup_deadline_at) > now);
@@ -119,10 +120,10 @@ export default async function HomePage({ searchParams }: {
       sprintResults.filter((item) => item.race_id === race.id), rules, true) : null;
     return { lineup, gp, sprint, total: (gp?.total ?? 0) + (sprint?.total ?? 0) };
   };
-  const standings = teams.map((team) => ({ team,
+  const standings = (needsScores ? teams : []).map((team) => ({ team,
     points: races.reduce((sum, race) => sum + scoreFor(team, race).total, 0),
   })).sort((a, b) => b.points - a.points || a.team.name.localeCompare(b.team.name));
-  const provisional = races.some((race) => (race.gp_published || race.sprint_published)
+  const provisional = needsScores && races.some((race) => (race.gp_published || race.sprint_published)
     && ((race.has_sprint && !race.sprint_published) || !race.gp_published
       || teams.some((team) => !lineups.some((lineup) => lineup.fantasy_team_id === team.id && lineup.race_id === race.id))));
 
@@ -141,7 +142,7 @@ export default async function HomePage({ searchParams }: {
             ['standings','Classifica'],['results','Risultati'],
           ].map(([id,label]) => <Link key={id} href={url(selected.id,id)}
             className={`block rounded-lg px-3 py-2.5 text-sm font-semibold ${tab === id ? 'bg-red-600' : 'text-zinc-300 hover:bg-zinc-800'}`}>{label}</Link>)}</nav>
-          <form action={signOut}><button className="mt-5 px-3 text-sm text-zinc-400 hover:text-white">Esci</button></form>
+          <form action={signOut}><SubmitButton pendingLabel="Uscita…" className="mt-5 px-3 text-sm text-zinc-400 hover:text-white">Esci</SubmitButton></form>
         </aside>
         <section className="min-w-0 space-y-6">
           {params.message && <p role="status" className="rounded-xl bg-amber-100 p-3 text-sm font-medium text-amber-950">{params.message}</p>}
@@ -269,12 +270,12 @@ export default async function HomePage({ searchParams }: {
                           {ownerName(member.user_id)}</option>)}
                       </select>
                     </label>
-                    <button disabled={!membersWithoutTeam.length} className="rounded-lg bg-red-600 px-4 py-2.5 font-bold text-white disabled:opacity-50">Assegna</button>
+                    <SubmitButton pendingLabel="Assegnazione…" disabled={!membersWithoutTeam.length} className="rounded-lg bg-red-600 px-4 py-2.5 font-bold text-white">Assegna</SubmitButton>
                   </form>
                   <form action={deleteTeamDraft}>
                     <input type="hidden" name="league_id" value={selected.id} />
                     <input type="hidden" name="draft_id" value={draft.id} />
-                    <button className="rounded-lg border border-zinc-300 px-4 py-2.5 font-bold">Elimina</button>
+                    <SubmitButton pendingLabel="Eliminazione…" className="rounded-lg border border-zinc-300 px-4 py-2.5 font-bold">Elimina</SubmitButton>
                   </form>
                 </div>
                 {!membersWithoutTeam.length && <p className="mt-3 text-sm text-zinc-500">Per assegnarla, il partecipante deve entrare nella lega con il codice invito.</p>}
@@ -303,7 +304,7 @@ export default async function HomePage({ searchParams }: {
                       <select required name="constructor_id" defaultValue={team?.constructor_id ?? ''} className="rounded-lg border p-2">
                         <option value="">Scuderia</option>{constructorRows.map((row) => <option key={row.constructor_id} value={row.constructor_id}>{constructorName(row.constructor_id)}</option>)}
                       </select>
-                    </div><button className="rounded-lg bg-zinc-950 px-4 py-2 font-bold text-white">{team ? 'Aggiorna squadra' : 'Crea squadra'}</button>
+                    </div><SubmitButton className="rounded-lg bg-zinc-950 px-4 py-2 font-bold text-white">{team ? 'Aggiorna squadra' : 'Crea squadra'}</SubmitButton>
                   </form>
                 </details>;
               })}</div>
@@ -312,7 +313,7 @@ export default async function HomePage({ searchParams }: {
               <p className="mt-2 text-sm text-zinc-500">La lega si attiva con 4–7 membri, ciascuno con una squadra completa.</p>
               {selected.status === 'recruiting' && <form action={activateLeague} className="mt-4">
                 <input type="hidden" name="league_id" value={selected.id} />
-                <button className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white">Attiva lega</button></form>}
+                <SubmitButton pendingLabel="Attivazione…" className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white">Attiva lega</SubmitButton></form>}
             </Card>
           </>}
         </section>
@@ -339,10 +340,10 @@ function LeagueForms() {
   return <div className="mt-5 grid gap-5 sm:grid-cols-2">
     <form action={createLeague} className="space-y-3"><h3 className="font-bold">Crea una lega</h3>
       <input name="name" required minLength={3} maxLength={100} placeholder="Nome della lega" className="w-full rounded-lg border p-3" />
-      <button className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white">Crea lega 2026</button></form>
+      <SubmitButton pendingLabel="Creazione…" className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white">Crea lega 2026</SubmitButton></form>
     <form action={joinLeague} className="space-y-3"><h3 className="font-bold">Entra in una lega</h3>
       <input name="code" required placeholder="Codice invito" className="w-full rounded-lg border p-3" />
-      <button className="rounded-lg bg-zinc-950 px-4 py-2 font-bold text-white">Entra</button></form>
+      <SubmitButton pendingLabel="Ingresso…" className="rounded-lg bg-zinc-950 px-4 py-2 font-bold text-white">Entra</SubmitButton></form>
   </div>;
 }
 function TeamDraftForm({ leagueId, draft, drivers, constructorRows, driverName }: {
@@ -382,9 +383,9 @@ function TeamDraftForm({ leagueId, draft, drivers, constructorRows, driverName }
         </select>
       </label>
     </div>
-    <button className="rounded-lg bg-zinc-950 px-4 py-2.5 font-bold text-white">
+    <SubmitButton className="rounded-lg bg-zinc-950 px-4 py-2.5 font-bold text-white">
       {draft ? 'Salva modifiche' : 'Prepara squadra'}
-    </button>
+    </SubmitButton>
   </form>;
 }
 function LineupForm({ leagueId, race, team, lineup, driverName }: {
@@ -399,7 +400,7 @@ function LineupForm({ leagueId, race, team, lineup, driverName }: {
       <select name={`driver_${slot}_id`} required defaultValue={index === 0 ? lineup?.driver_one_id ?? '' : lineup?.driver_two_id ?? ''}
         className="mt-1 w-full rounded-lg border p-2.5"><option value="">Seleziona</option>
         {roster.map((id) => <option key={id} value={id}>{driverName(id)}</option>)}</select></label>)}
-    <button className="self-end rounded-lg bg-red-600 px-4 py-2.5 font-bold text-white">Salva</button>
+    <SubmitButton className="self-end rounded-lg bg-red-600 px-4 py-2.5 font-bold text-white">Salva</SubmitButton>
     <p className="text-xs text-zinc-500 md:col-span-3">La riserva è automaticamente il terzo pilota non schierato.
       {lineup && ` Ultimo salvataggio: ${lineup.retroactive ? 'recupero admin' : 'utente'}.`}</p>
   </form>;

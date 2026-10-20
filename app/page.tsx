@@ -21,13 +21,12 @@ export default function LoginPage() {
     }
     setLoading(true);
     const { error: authError } = await createClient().auth.signInWithPassword({ email, password });
-    setLoading(false);
     if (authError) {
+      setLoading(false);
       setError('Accesso non riuscito. Controlla email, password e conferma dell’account.');
       return;
     }
-    router.push('/home');
-    router.refresh();
+    router.replace('/home');
   }
 
   return (

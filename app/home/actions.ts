@@ -61,14 +61,13 @@ export async function saveTeam(form: FormData) {
   const ids = ['driver_one_id', 'driver_two_id', 'driver_three_id'].map((key) => numberField(form, key));
   if (!leagueId || !userId || name.length < 2 || !constructorId || ids.some((id) => !id)
     || new Set(ids).size !== 3) redirect(home(leagueId, 'manage', 'Squadra non valida'));
-  const { data: league } = await supabase.from('leagues').select('season_id')
-    .eq('id', leagueId).single();
+  const [{ data: league }, { data: admin }, { data: existing }] = await Promise.all([
+    supabase.from('leagues').select('season_id').eq('id', leagueId).single(),
+    supabase.from('league_members').select('role').eq('league_id', leagueId).eq('user_id', actorId).single(),
+    supabase.from('fantasy_teams').select('id').eq('league_id', leagueId).eq('user_id', userId).maybeSingle(),
+  ]);
   if (!league) redirect(home(leagueId, 'manage', 'Lega non trovata'));
-  const { data: admin } = await supabase.from('league_members').select('role')
-    .eq('league_id', leagueId).eq('user_id', actorId).single();
   if (admin?.role !== 'admin') redirect(home(leagueId, 'overview', 'Solo l’amministratore può assegnare squadre'));
-  const { data: existing } = await supabase.from('fantasy_teams').select('id')
-    .eq('league_id', leagueId).eq('user_id', userId).maybeSingle();
   const payload = { name, constructor_id: constructorId,
     driver_one_id: ids[0], driver_two_id: ids[1], driver_three_id: ids[2] };
   const response = existing
@@ -93,11 +92,11 @@ export async function saveTeamDraft(form: FormData) {
     || ids.some((id) => !id) || new Set(ids).size !== 3) {
     redirect(home(leagueId, 'manage', 'Completa la squadra in attesa con tre piloti diversi'));
   }
-  const { data: admin } = await supabase.from('league_members').select('role')
-    .eq('league_id', leagueId).eq('user_id', userId).single();
+  const [{ data: admin }, { data: league }] = await Promise.all([
+    supabase.from('league_members').select('role').eq('league_id', leagueId).eq('user_id', userId).single(),
+    supabase.from('leagues').select('season_id').eq('id', leagueId).single(),
+  ]);
   if (admin?.role !== 'admin') redirect(home(leagueId, 'overview', 'Solo l’admin può preparare le squadre'));
-  const { data: league } = await supabase.from('leagues').select('season_id')
-    .eq('id', leagueId).single();
   if (!league) redirect(home(leagueId, 'manage', 'Lega non trovata'));
   const payload = { player_name: playerName, name, constructor_id: constructorId,
     driver_one_id: ids[0], driver_two_id: ids[1], driver_three_id: ids[2] };
@@ -117,11 +116,11 @@ export async function assignTeamDraft(form: FormData) {
   const draftId = textField(form, 'draft_id');
   const recipientId = textField(form, 'user_id');
   if (!leagueId || !draftId || !recipientId) redirect(home(leagueId, 'manage', 'Seleziona un partecipante'));
-  const { data: admin } = await supabase.from('league_members').select('role')
-    .eq('league_id', leagueId).eq('user_id', userId).single();
+  const [{ data: admin }, { data: draft }] = await Promise.all([
+    supabase.from('league_members').select('role').eq('league_id', leagueId).eq('user_id', userId).single(),
+    supabase.from('team_drafts').select('id').eq('id', draftId).eq('league_id', leagueId).single(),
+  ]);
   if (admin?.role !== 'admin') redirect(home(leagueId, 'overview', 'Solo l’admin può assegnare le squadre'));
-  const { data: draft } = await supabase.from('team_drafts').select('id')
-    .eq('id', draftId).eq('league_id', leagueId).single();
   if (!draft) redirect(home(leagueId, 'manage', 'Squadra in attesa non trovata'));
   const { error } = await supabase.rpc('assign_team_draft', { p_draft_id: draftId, p_user_id: recipientId });
   if (error) redirect(home(leagueId, 'manage', error.code === '23505'

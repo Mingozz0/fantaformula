@@ -28,14 +28,13 @@ export default function RegisterPage() {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
-    setLoading(false);
-    if (authError) { setError(authError.message); return; }
+    if (authError) { setLoading(false); setError(authError.message); return; }
     if (!data.session) {
+      setLoading(false);
       setNotice('Controlla la tua email e conferma l’account, poi accedi.');
       return;
     }
-    router.push('/home');
-    router.refresh();
+    router.replace('/home');
   }
   return <main className="grid min-h-screen place-items-center bg-[#0d0d0f] p-6 text-white">
     <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-950 p-8 shadow-2xl">

@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { NavigationLink as Link, SubmitButton } from '@/app/components/action-feedback';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { publishResults, saveResults } from './actions';
@@ -91,10 +91,10 @@ export default async function ManagerPage({ searchParams }: {
               <td className="p-2 text-center"><input type="checkbox" name={`formation_${row.driver_id}`} defaultChecked={result?.formation_lap ?? true} /></td>
             </tr>;
           })}</tbody></table></div>
-          <button className="rounded-lg bg-red-600 px-5 py-3 font-bold text-white">Salva risultati {event === 'gp' ? 'GP' : 'Sprint'}</button>
+          <SubmitButton className="rounded-lg bg-red-600 px-5 py-3 font-bold text-white">Salva risultati {event === 'gp' ? 'GP' : 'Sprint'}</SubmitButton>
         </form>
         <form action={publishResults} className="mt-5 border-t border-zinc-200 pt-5"><input type="hidden" name="race_id" value={selected.id} />
-          <input type="hidden" name="event" value={event} /><button className="rounded-lg bg-zinc-950 px-5 py-3 font-bold text-white">Pubblica risultati</button>
+          <input type="hidden" name="event" value={event} /><SubmitButton pendingLabel="Pubblicazione…" className="rounded-lg bg-zinc-950 px-5 py-3 font-bold text-white">Pubblica risultati</SubmitButton>
           <p className="mt-2 text-xs text-zinc-500">La pubblicazione richiede tutti i piloti, posizioni coerenti e i bonus della gara.</p></form>
       </div></>}
   </div></main>;
