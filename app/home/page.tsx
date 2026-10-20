@@ -2,12 +2,15 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { scoreEvent, type DriverResult, type FantasyLineup, type ScoringRules } from '@/lib/scoring';
-import { activateLeague, createLeague, joinLeague, saveLineup, saveTeam, signOut } from './actions';
+import { activateLeague, assignTeamDraft, createLeague, deleteTeamDraft, joinLeague,
+  saveLineup, saveTeam, saveTeamDraft, signOut } from './actions';
 
 type League = { id: string; name: string; season_id: number; status: string; invite_code: string };
 type Member = { user_id: string; role: string };
 type Profile = { id: string; display_name: string };
 type Team = { id: string; league_id: string; user_id: string; name: string; constructor_id: number;
+  driver_one_id: number; driver_two_id: number; driver_three_id: number };
+type TeamDraft = { id: string; league_id: string; player_name: string; name: string; constructor_id: number;
   driver_one_id: number; driver_two_id: number; driver_three_id: number };
 type Driver = { id: number; first_name: string; last_name: string };
 type Constructor = { id: number; canonical_name: string };
@@ -68,6 +71,7 @@ export default async function HomePage({ searchParams }: {
     supabase.from('season_scoring_rules').select('*').eq('season_id', selected.season_id).maybeSingle(),
   ]);
   const members = (membersData ?? []) as Member[];
+  const isAdmin = members.some((m) => m.user_id === userId && m.role === 'admin');
   const teams = (teamsData ?? []) as Team[];
   const seasonDrivers = seasonDriversData ?? [];
   const constructorRows = constructorsData ?? [];
@@ -75,7 +79,8 @@ export default async function HomePage({ searchParams }: {
   const driverIds = seasonDrivers.map((row) => row.driver_id);
   const constructorIds = constructorRows.map((row) => row.constructor_id);
   const [{ data: profilesData }, { data: driversData }, { data: constructorsRaw },
-    { data: lineupsData }, { data: gpData }, { data: sprintData }, { data: pitData }] = await Promise.all([
+    { data: lineupsData }, { data: gpData }, { data: sprintData }, { data: pitData },
+    { data: draftsData }] = await Promise.all([
     members.length ? supabase.from('profiles').select('id,display_name').in('id', members.map((m) => m.user_id)) : Promise.resolve({ data: [] }),
     driverIds.length ? supabase.from('drivers').select('id,first_name,last_name').in('id', driverIds) : Promise.resolve({ data: [] }),
     constructorIds.length ? supabase.from('constructors').select('id,canonical_name').in('id', constructorIds) : Promise.resolve({ data: [] }),
@@ -83,6 +88,8 @@ export default async function HomePage({ searchParams }: {
     supabase.from('race_driver_results').select('*').eq('season_id', selected.season_id),
     supabase.from('sprint_driver_results').select('*').eq('season_id', selected.season_id),
     supabase.from('race_constructor_results').select('*').eq('season_id', selected.season_id),
+    isAdmin ? supabase.from('team_drafts').select('*').eq('league_id', selected.id).order('created_at')
+      : Promise.resolve({ data: [] }),
   ]);
   const profiles = (profilesData ?? []) as Profile[];
   const drivers = (driversData ?? []) as Driver[];
@@ -91,9 +98,10 @@ export default async function HomePage({ searchParams }: {
   const gpResults = (gpData ?? []) as RaceResult[];
   const sprintResults = (sprintData ?? []) as RaceResult[];
   const pitResults = (pitData ?? []) as Pit[];
+  const drafts = (draftsData ?? []) as TeamDraft[];
   const rules = rulesData as ScoringRules | null;
-  const isAdmin = members.some((m) => m.user_id === userId && m.role === 'admin');
   const myTeam = teams.find((team) => team.user_id === userId);
+  const membersWithoutTeam = members.filter((member) => !teams.some((team) => team.user_id === member.user_id));
   const driverName = (id: number) => { const d = drivers.find((item) => item.id === id); return d ? `${d.first_name} ${d.last_name}` : `Pilota ${id}`; };
   const constructorName = (id: number) => constructorRows.find((item) => item.constructor_id === id)?.display_name
     ?? constructors.find((item) => item.id === id)?.canonical_name ?? `Scuderia ${id}`;
@@ -250,6 +258,34 @@ export default async function HomePage({ searchParams }: {
                 </div><button className="rounded-lg bg-zinc-950 px-4 py-2 font-bold text-white">Salva squadra</button>
               </form>;
             })}</div></Card>
+            <Card title="Squadre per i ragazzi non ancora registrati">
+              <p className="mb-5 text-sm text-zinc-600">Prepara una squadra indicando il nome del ragazzo. Quando si registra ed entra con il codice invito, assegnagli qui la squadra già pronta.</p>
+              <TeamDraftForm leagueId={selected.id} drivers={drivers} constructorRows={constructorRows}
+                driverName={driverName} />
+              {drafts.map((draft) => <div key={draft.id} className="mt-8 border-t border-zinc-200 pt-6">
+                <TeamDraftForm leagueId={selected.id} draft={draft} drivers={drivers}
+                  constructorRows={constructorRows} driverName={driverName} />
+                <div className="mt-4 flex flex-wrap items-end gap-3">
+                  <form action={assignTeamDraft} className="flex flex-wrap items-end gap-3">
+                    <input type="hidden" name="league_id" value={selected.id} />
+                    <input type="hidden" name="draft_id" value={draft.id} />
+                    <label className="text-sm font-semibold">Assegna a un membro entrato nella lega
+                      <select name="user_id" required defaultValue="" className="mt-1 block rounded-lg border p-2.5">
+                        <option value="">Seleziona partecipante</option>
+                        {membersWithoutTeam.map((member) => <option key={member.user_id} value={member.user_id}>
+                          {ownerName(member.user_id)}</option>)}
+                      </select>
+                    </label>
+                    <button disabled={!membersWithoutTeam.length} className="rounded-lg bg-red-600 px-4 py-2.5 font-bold text-white disabled:opacity-50">Assegna squadra</button>
+                  </form>
+                  <form action={deleteTeamDraft}>
+                    <input type="hidden" name="league_id" value={selected.id} />
+                    <input type="hidden" name="draft_id" value={draft.id} />
+                    <button className="rounded-lg border border-zinc-300 px-4 py-2.5 font-bold">Elimina bozza</button>
+                  </form>
+                </div>
+              </div>)}
+            </Card>
           </>}
         </section>
       </div>
@@ -274,12 +310,54 @@ function Metric({ label, value }: { label: string; value: string }) {
 function LeagueForms() {
   return <div className="mt-5 grid gap-5 sm:grid-cols-2">
     <form action={createLeague} className="space-y-3"><h3 className="font-bold">Crea una lega</h3>
-      <input name="name" required minLength={3} placeholder="Nome della lega" className="w-full rounded-lg border p-3" />
+      <input name="name" required minLength={3} maxLength={100} placeholder="Nome della lega" className="w-full rounded-lg border p-3" />
       <button className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white">Crea lega 2026</button></form>
     <form action={joinLeague} className="space-y-3"><h3 className="font-bold">Entra in una lega</h3>
       <input name="code" required placeholder="Codice invito" className="w-full rounded-lg border p-3" />
       <button className="rounded-lg bg-zinc-950 px-4 py-2 font-bold text-white">Entra</button></form>
   </div>;
+}
+function TeamDraftForm({ leagueId, draft, drivers, constructorRows, driverName }: {
+  leagueId: string; draft?: TeamDraft; drivers: Driver[];
+  constructorRows: { constructor_id: number; display_name: string }[];
+  driverName: (id: number) => string;
+}) {
+  return <form action={saveTeamDraft} className="space-y-3">
+    <h3 className="font-bold">{draft ? `Squadra preparata per ${draft.player_name}` : 'Prepara una nuova squadra'}</h3>
+    <input type="hidden" name="league_id" value={leagueId} />
+    {draft && <input type="hidden" name="draft_id" value={draft.id} />}
+    <div className="grid gap-3 sm:grid-cols-2">
+      <label className="text-sm font-semibold">Nome del ragazzo
+        <input name="player_name" required minLength={2} maxLength={80} defaultValue={draft?.player_name ?? ''}
+          placeholder="Es. Marco" className="mt-1 block w-full rounded-lg border p-2.5" />
+      </label>
+      <label className="text-sm font-semibold">Nome squadra
+        <input name="name" required minLength={2} maxLength={80} defaultValue={draft?.name ?? ''}
+          placeholder="Es. Scuderia Marco" className="mt-1 block w-full rounded-lg border p-2.5" />
+      </label>
+    </div>
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {(['one', 'two', 'three'] as const).map((slot, index) => <label key={slot} className="text-sm font-semibold">
+        Pilota {index + 1}
+        <select name={`driver_${slot}_id`} required defaultValue={draft?.[`driver_${slot}_id`] ?? ''}
+          className="mt-1 block w-full rounded-lg border p-2.5">
+          <option value="">Seleziona</option>
+          {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driverName(driver.id)}</option>)}
+        </select>
+      </label>)}
+      <label className="text-sm font-semibold">Scuderia
+        <select name="constructor_id" required defaultValue={draft?.constructor_id ?? ''}
+          className="mt-1 block w-full rounded-lg border p-2.5">
+          <option value="">Seleziona</option>
+          {constructorRows.map((row) => <option key={row.constructor_id} value={row.constructor_id}>
+            {row.display_name}</option>)}
+        </select>
+      </label>
+    </div>
+    <button className="rounded-lg bg-zinc-950 px-4 py-2.5 font-bold text-white">
+      {draft ? 'Aggiorna squadra in attesa' : 'Salva squadra in attesa'}
+    </button>
+  </form>;
 }
 function LineupForm({ leagueId, race, team, lineup, driverName }: {
   leagueId: string; race: Race; team: Team; lineup?: Lineup; driverName: (id: number) => string;

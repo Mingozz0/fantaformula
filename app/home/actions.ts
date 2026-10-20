@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server';
 
 function textField(form: FormData, key: string) { return String(form.get(key) ?? '').trim(); }
 function numberField(form: FormData, key: string) { return Number(textField(form, key)); }
+function normalizedName(value: string) { return value.trim().replace(/\s+/g, ' '); }
 function home(leagueId?: string, tab?: string, message?: string) {
   const params = new URLSearchParams();
   if (leagueId) params.set('league', leagueId);
@@ -28,13 +29,16 @@ export async function signOut() {
 
 export async function createLeague(form: FormData) {
   const { supabase, userId } = await authenticated();
-  const name = textField(form, 'name');
+  const name = normalizedName(textField(form, 'name'));
   const { data: season } = await supabase.from('seasons').select('id').eq('year', 2026).single();
-  if (!season || name.length < 3) redirect(home(undefined, undefined, 'Nome lega non valido'));
+  if (!season || name.length < 3 || name.length > 100) {
+    redirect(home(undefined, undefined, 'Il nome della lega deve avere da 3 a 100 caratteri'));
+  }
   const { data, error } = await supabase.from('leagues')
     .insert({ name, season_id: season.id, created_by: userId })
     .select('id').single();
-  if (error || !data) redirect(home(undefined, undefined, error?.message ?? 'Creazione non riuscita'));
+  if (error || !data) redirect(home(undefined, undefined,
+    error?.code === '23505' ? 'Hai già una lega 2026 con questo nome' : error?.message ?? 'Creazione non riuscita'));
   revalidatePath('/home');
   redirect(home(data.id, 'manage', 'Lega creata'));
 }
@@ -74,6 +78,70 @@ export async function saveTeam(form: FormData) {
   if (response.error) redirect(home(leagueId, 'manage', response.error.message));
   revalidatePath('/home');
   redirect(home(leagueId, 'manage', 'Squadra salvata'));
+}
+
+export async function saveTeamDraft(form: FormData) {
+  const { supabase, userId } = await authenticated();
+  const leagueId = textField(form, 'league_id');
+  const draftId = textField(form, 'draft_id');
+  const playerName = normalizedName(textField(form, 'player_name'));
+  const name = normalizedName(textField(form, 'name'));
+  const constructorId = numberField(form, 'constructor_id');
+  const ids = ['driver_one_id', 'driver_two_id', 'driver_three_id'].map((key) => numberField(form, key));
+  if (!leagueId || playerName.length < 2 || playerName.length > 80
+    || name.length < 2 || name.length > 80 || !constructorId
+    || ids.some((id) => !id) || new Set(ids).size !== 3) {
+    redirect(home(leagueId, 'manage', 'Completa la squadra in attesa con tre piloti diversi'));
+  }
+  const { data: admin } = await supabase.from('league_members').select('role')
+    .eq('league_id', leagueId).eq('user_id', userId).single();
+  if (admin?.role !== 'admin') redirect(home(leagueId, 'overview', 'Solo l’admin può preparare le squadre'));
+  const { data: league } = await supabase.from('leagues').select('season_id')
+    .eq('id', leagueId).single();
+  if (!league) redirect(home(leagueId, 'manage', 'Lega non trovata'));
+  const payload = { player_name: playerName, name, constructor_id: constructorId,
+    driver_one_id: ids[0], driver_two_id: ids[1], driver_three_id: ids[2] };
+  const response = draftId
+    ? await supabase.from('team_drafts').update(payload).eq('id', draftId).eq('league_id', leagueId)
+      .select('id').single()
+    : await supabase.from('team_drafts').insert({ ...payload, league_id: leagueId,
+      season_id: league.season_id }).select('id').single();
+  if (response.error) redirect(home(leagueId, 'manage', response.error.message));
+  revalidatePath('/home');
+  redirect(home(leagueId, 'manage', draftId ? 'Squadra in attesa aggiornata' : 'Squadra in attesa salvata'));
+}
+
+export async function assignTeamDraft(form: FormData) {
+  const { supabase, userId } = await authenticated();
+  const leagueId = textField(form, 'league_id');
+  const draftId = textField(form, 'draft_id');
+  const recipientId = textField(form, 'user_id');
+  if (!leagueId || !draftId || !recipientId) redirect(home(leagueId, 'manage', 'Seleziona un partecipante'));
+  const { data: admin } = await supabase.from('league_members').select('role')
+    .eq('league_id', leagueId).eq('user_id', userId).single();
+  if (admin?.role !== 'admin') redirect(home(leagueId, 'overview', 'Solo l’admin può assegnare le squadre'));
+  const { data: draft } = await supabase.from('team_drafts').select('id')
+    .eq('id', draftId).eq('league_id', leagueId).single();
+  if (!draft) redirect(home(leagueId, 'manage', 'Squadra in attesa non trovata'));
+  const { error } = await supabase.rpc('assign_team_draft', { p_draft_id: draftId, p_user_id: recipientId });
+  if (error) redirect(home(leagueId, 'manage', error.code === '23505'
+    ? 'Questo partecipante ha già una squadra' : error.message));
+  revalidatePath('/home');
+  redirect(home(leagueId, 'manage', 'Squadra assegnata al partecipante'));
+}
+
+export async function deleteTeamDraft(form: FormData) {
+  const { supabase, userId } = await authenticated();
+  const leagueId = textField(form, 'league_id');
+  const draftId = textField(form, 'draft_id');
+  const { data: admin } = await supabase.from('league_members').select('role')
+    .eq('league_id', leagueId).eq('user_id', userId).single();
+  if (admin?.role !== 'admin') redirect(home(leagueId, 'overview', 'Solo l’admin può eliminare le bozze'));
+  const { error } = await supabase.from('team_drafts').delete().eq('id', draftId)
+    .eq('league_id', leagueId).select('id').single();
+  if (error) redirect(home(leagueId, 'manage', error.message));
+  revalidatePath('/home');
+  redirect(home(leagueId, 'manage', 'Squadra in attesa eliminata'));
 }
 
 export async function activateLeague(form: FormData) {

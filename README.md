@@ -19,7 +19,7 @@ Nel progetto Supabase, in **Authentication → URL Configuration**, configura `h
 
 1. L'utente si registra con nome, email e password, conferma l'email se richiesta e accede.
 2. Crea una lega 2026 o entra con un codice invito. Può selezionare una delle sue leghe dalla barra laterale.
-3. L'admin della lega assegna una squadra completa a ogni partecipante. La lega si attiva solo con 4–7 membri e una squadra per ciascuno.
+3. L'admin della lega può preparare squadre per ragazzi non ancora registrati. Quando entrano con il codice invito, assegna loro le squadre preparate; può anche creare o modificare direttamente la squadra di un membro già entrato. La lega si attiva solo con 4–7 membri registrati e una squadra assegnata a ciascuno.
 4. Il partecipante vede la rosa e salva la formazione del prossimo GP: 2 titolari; il terzo pilota è automaticamente la riserva. La scuderia della rosa è sempre schierata.
 5. Per i GP già conclusi, l'admin può recuperare le formazioni delle squadre della propria lega. Il recupero è registrato in `lineup_audit`.
 6. Il gestore globale inserisce i risultati GP e Sprint, poi li pubblica. Solo i risultati pubblicati entrano nella classifica e nella pagina Risultati. Se li corregge, la gara torna non pubblicata finché non viene confermata di nuovo.
@@ -61,6 +61,7 @@ Un admin di lega non può modificare i risultati sportivi comuni a tutte le legh
 - `supabase/policy_and_query_indexes.sql`: policy RLS consolidate e indici per classifica e risultati.
 - `supabase/active_league_lineups.sql`: blocco delle formazioni finché la lega non è attiva.
 - `supabase/published_result_visibility.sql`: risultati in bozza leggibili solo dal gestore.
+- `supabase/migrations/20261020080516_league_names_and_team_drafts.sql`: nome lega univoco per creatore e stagione, squadre preparate prima della registrazione e assegnazione ai membri.
 
 Il calendario è stato verificato con il [calendario ufficiale F1 2026](https://www.formula1.com/en/racing/2026), le [scuderie](https://www.formula1.com/en/teams) e il [calendario Sprint](https://corp.formula1.com/formula-1-and-fia-announce-2026-sprint-calendar/) al 15 ottobre 2026. Sono registrate le **date** dei GP e le scadenze delle formazioni; gli orari di partenza delle gare non ancora verificati restano vuoti. Il gestore deve aggiornare il calendario se la F1 cambia date o orari.
 
