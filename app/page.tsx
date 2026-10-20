@@ -1,169 +1,77 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowRight, Flag, Trophy, Users } from 'lucide-react';
+import { FormEvent, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 
-export default function Login() {
-	const [showPassword, setShowPassword] = useState(false);
-	const [email, setEmail] = useState('');
-	const [password, setPassword] = useState('');
-	const [emailError, setEmailError] = useState('');
-	const [passwordError, setPasswordError] = useState('');
+export default function LoginPage() {
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!email || !password) {
+      setError('Inserisci email e password per proseguire.');
+      return;
+    }
+    setLoading(true);
+    const { error: authError } = await createClient().auth.signInWithPassword({ email, password });
+    setLoading(false);
+    if (authError) {
+      setError('Accesso non riuscito. Controlla email, password e conferma dell’account.');
+      return;
+    }
+    router.push('/home');
+    router.refresh();
+  }
 
-	const handleSubmit = (e: React.FormEvent) => {
-		e.preventDefault();
+  return (
+    <main className="min-h-screen bg-[#0d0d0f] text-white">
+      <div className="mx-auto grid min-h-screen max-w-7xl lg:grid-cols-[1.15fr_0.85fr]">
+        <section className="flex flex-col justify-between overflow-hidden bg-[radial-gradient(circle_at_20%_20%,#8f111a,transparent_35%),linear-gradient(135deg,#151519,#09090b)] p-8 md:p-14">
+          <Link href="/" className="flex items-center gap-3 text-lg font-black tracking-tight">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-red-600"><Flag size={21} /></span>
+            GRID<span className="text-red-500">F1</span>
+          </Link>
+          <div className="max-w-xl py-16">
+            <p className="mb-5 text-sm font-bold uppercase tracking-[0.24em] text-red-400">Fanta Formula 1</p>
+            <h1 className="text-5xl font-black leading-[0.95] tracking-tight md:text-7xl">La tua griglia.<br />La tua stagione.</h1>
+            <p className="mt-7 max-w-md text-lg leading-8 text-zinc-300">Crea una lega con gli amici, scegli i tuoi piloti e schiera la formazione prima di ogni Gran Premio.</p>
+          </div>
+          <div className="grid max-w-xl grid-cols-3 gap-3 text-sm text-zinc-200">
+            <Stat icon={<Users size={18} />} value="4–7" label="partecipanti" />
+            <Stat icon={<Trophy size={18} />} value="3" label="piloti" />
+            <Stat icon={<Flag size={18} />} value="1" label="scuderia" />
+          </div>
+        </section>
+        <section className="flex items-center justify-center bg-zinc-950 p-6 md:p-12">
+          <div className="w-full max-w-md">
+            <p className="text-sm font-bold uppercase tracking-[0.2em] text-zinc-500">Bentornato</p>
+            <h2 className="mt-3 text-3xl font-bold">Accedi alla tua lega</h2>
+            <p className="mt-2 text-zinc-400">Accedi con il tuo account GRIDF1.</p>
+            <form className="mt-9 space-y-5" onSubmit={submit} noValidate>
+              <label className="block text-sm font-medium text-zinc-300">Email
+                <input value={email} onChange={(event) => { setEmail(event.target.value); setError(''); }} type="email" className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3.5 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30" placeholder="nome@email.it" />
+              </label>
+              <label className="block text-sm font-medium text-zinc-300">Password
+                <input value={password} onChange={(event) => { setPassword(event.target.value); setError(''); }} type="password" className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3.5 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30" placeholder="••••••••" />
+              </label>
+              {error && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
+              <button disabled={loading} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3.5 font-bold transition hover:bg-red-500 disabled:opacity-60">{loading ? 'Accesso in corso…' : 'Entra nella griglia'} <ArrowRight size={18} /></button>
+            </form>
+            <p className="mt-7 text-center text-sm text-zinc-400">Non hai un account? <Link className="font-bold text-red-400 hover:text-red-300" href="/register">Registrati</Link></p>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
 
-		let emailErr: string = '';
-		if (!email) {
-			emailErr = 'Inserisci il tuo indirizzo email';
-		} else {
-			const emailRegex: RegExp = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-			if (!emailRegex.test(email)) {
-				emailErr = 'Inserisci un indirizzo email valido';
-			}
-		}
-
-		let passwordErr: string = '';
-		if (!password) {
-			passwordErr = 'Inserisci la tua password';
-		} else if (password.length < 6) {
-			passwordErr = 'La password deve essere di almeno 6 caratteri';
-		}
-
-		setEmailError(emailErr);
-		setPasswordError(passwordErr);
-
-		if (!emailErr && !passwordErr) {
-			// Qui puoi aggiungere la logica di autenticazione
-
-		}
-	};
-
-	useEffect(() => {
-		if (emailError) {
-			const timer = setTimeout(() => {
-				setEmailError('');
-			}, 2500);
-			return () => clearTimeout(timer);
-		}
-	}, [emailError]);
-
-	useEffect(() => {
-		if (passwordError) {
-			const timer = setTimeout(() => {
-				setPasswordError('');
-			}, 2500);
-			return () => clearTimeout(timer);
-		}
-	}, [passwordError]);
-	return (
-		<div className="flex min-h-screen flex-col items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-			<div className="text-center mb-8">
-				<h1 className="text-5xl font-bold text-red-500 dark:text-red-400 mb-2">
-					Fanta Formula uno
-				</h1>
-			</div>
-			<main className="w-full max-w-md p-8 bg-white dark:bg-zinc-900 rounded-lg shadow-lg">
-				<div className="text-center mb-8">
-					<h2 className="text-3xl font-semibold text-black dark:text-zinc-50 mb-2">
-						Accedi
-					</h2>
-					<p className="text-zinc-600 dark:text-zinc-400">
-						Inserisci le tue credenziali per accedere
-					</p>
-				</div>
-
-				<form className="space-y-6" onSubmit={handleSubmit} noValidate>
-					<div>
-						<label htmlFor="email" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-							Email
-						</label>
-						<input
-							type="email"
-							id="email"
-							name="email"
-							value={email}
-							onChange={(e) => {
-								setEmail(e.target.value);
-								if (emailError) setEmailError(''); // Pulisce l'errore quando l'utente inizia a digitare
-							}}
-							className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-red-400 focus:border-transparent bg-white dark:bg-zinc-800 text-black dark:text-zinc-50 placeholder-zinc-500 dark:placeholder-zinc-400 ${emailError ? 'border-red-500' : 'border-zinc-300 dark:border-zinc-600'
-								}`}
-							placeholder="mario.rossi@gmail.com"
-						/>
-						{emailError && (
-							<p className="mt-1 text-sm text-red-600 dark:text-red-400">{emailError}</p>
-						)}
-					</div>
-
-					<div>
-						<label htmlFor="password" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300 mb-2">
-							Password
-						</label>
-						<div className="relative">
-							<input
-								type={showPassword ? "text" : "password"}
-								id="password"
-								name="password"
-								value={password}
-								onChange={(e) => {
-									setPassword(e.target.value);
-									if (passwordError) setPasswordError(''); // Pulisce l'errore quando l'utente inizia a digitare
-								}}
-								className={`w-full px-4 py-3 pr-12 border rounded-lg focus:ring-2 focus:ring-red-400 focus:border-transparent bg-white dark:bg-zinc-800 text-black dark:text-zinc-50 placeholder-zinc-500 dark:placeholder-zinc-400 ${passwordError ? 'border-red-500' : 'border-zinc-300 dark:border-zinc-600'
-									}`}
-								placeholder="••••••••"
-							/>
-							<button
-								type="button"
-								onClick={() => setShowPassword(!showPassword)}
-								className="absolute right-3 top-1/2 transform -translate-y-1/2 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 focus:outline-none"
-							>
-								{showPassword ? (
-									<EyeOff className="h-5 w-5" />
-								) : (
-									<Eye className="h-5 w-5" />
-								)}
-							</button>
-						</div>
-						{passwordError && (
-							<p className="mt-1 text-sm text-red-600 dark:text-red-400">{passwordError}</p>
-						)}
-					</div>
-
-					<div className="flex items-center justify-between">
-						<label className="flex items-center">
-							<input
-								type="checkbox"
-								className="h-4 w-4 text-red-600 focus:ring-red-500 border-zinc-300 dark:border-zinc-600 rounded"
-							/>
-							<span className="ml-2 text-sm text-zinc-600 dark:text-zinc-400">
-								Ricordami
-							</span>
-						</label>
-						<a href="#" className="text-sm text-red-600 hover:text-red-500 dark:text-red-400 dark:hover:text-red-300">
-							Password dimenticata?
-						</a>
-					</div>
-
-					<button
-						type="submit"
-						className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 focus:ring-2 focus:ring-red-500 focus:ring-offset-2 hover:cursor-pointer"
-					>
-						Accedi
-					</button>
-				</form>
-
-				<div className="mt-8 text-center">
-					<p className="text-sm text-zinc-600 dark:text-zinc-400">
-						Non hai un account?{" "}
-						<a href="/register" className="text-red-600 hover:text-red-500 dark:text-red-400 dark:hover:text-red-300 font-medium">
-							Registrati
-						</a>
-					</p>
-				</div>
-			</main>
-		</div>
-	);
+function Stat({ icon, value, label }: { icon: React.ReactNode; value: string; label: string }) {
+  return <div className="rounded-xl border border-white/10 bg-white/5 p-4"><div className="mb-5 text-red-400">{icon}</div><p className="text-xl font-black">{value}</p><p className="text-xs text-zinc-400">{label}</p></div>;
 }
