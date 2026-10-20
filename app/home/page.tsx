@@ -71,7 +71,8 @@ export default async function HomePage({ searchParams }: {
     supabase.from('season_scoring_rules').select('*').eq('season_id', selected.season_id).maybeSingle(),
   ]);
   const members = (membersData ?? []) as Member[];
-  const isAdmin = members.some((m) => m.user_id === userId && m.role === 'admin');
+  const isAdmin = (memberships ?? []).some((membership) =>
+    membership.league_id === selected.id && membership.role === 'admin');
   const teams = (teamsData ?? []) as Team[];
   const seasonDrivers = seasonDriversData ?? [];
   const constructorRows = constructorsData ?? [];
@@ -135,8 +136,9 @@ export default async function HomePage({ searchParams }: {
             <Link className={`block rounded-lg px-3 py-2 text-sm ${league.id === selected.id ? 'bg-red-600' : 'hover:bg-zinc-800'}`}
               key={league.id} href={url(league.id, 'overview')}>{league.name}</Link>)}</div>}
           <nav className="mt-5 space-y-1">{[
+            ...(isAdmin ? [['manage','Gestione squadre']] : []),
             ['overview','Panoramica'],['team','La mia squadra'],['lineup','Formazione'],
-            ['standings','Classifica'],['results','Risultati'], ...(isAdmin ? [['manage','Gestione lega']] : []),
+            ['standings','Classifica'],['results','Risultati'],
           ].map(([id,label]) => <Link key={id} href={url(selected.id,id)}
             className={`block rounded-lg px-3 py-2.5 text-sm font-semibold ${tab === id ? 'bg-red-600' : 'text-zinc-300 hover:bg-zinc-800'}`}>{label}</Link>)}</nav>
           <form action={signOut}><button className="mt-5 px-3 text-sm text-zinc-400 hover:text-white">Esci</button></form>
@@ -148,6 +150,12 @@ export default async function HomePage({ searchParams }: {
             <p className="mt-2 text-zinc-500">{members.length} di 7 partecipanti · {isAdmin ? 'Amministratore' : 'Partecipante'}</p></div>
 
           {tab === 'overview' && <>
+            {isAdmin && <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
+              <h2 className="text-lg font-black">Gestisci le squadre della lega</h2>
+              <p className="mt-1 text-sm text-zinc-700">Prepara le rose per i partecipanti e assegnale quando entrano nella lega.</p>
+              <Link href={url(selected.id, 'manage')}
+                className="mt-4 inline-block rounded-lg bg-red-600 px-4 py-2.5 font-bold text-white">Apri gestione squadre</Link>
+            </div>}
             <div className="grid gap-4 md:grid-cols-3">
               <Metric label="La tua squadra" value={myTeam?.name ?? 'Da assegnare'} />
               <Metric label="Punti" value={String(standings.find((item) => item.team.user_id === userId)?.points ?? 0)} />
@@ -236,55 +244,75 @@ export default async function HomePage({ searchParams }: {
           })}</div>}
 
           {tab === 'manage' && isAdmin && <>
-            <Card title="Inviti e attivazione"><p>Codice invito: <strong className="font-mono text-lg">{selected.invite_code}</strong></p>
-              <p className="mt-2 text-sm text-zinc-500">La lega si attiva con 4–7 membri, ciascuno con una squadra completa.</p>
-              {selected.status === 'recruiting' && <form action={activateLeague} className="mt-4">
-                <input type="hidden" name="league_id" value={selected.id} />
-                <button className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white">Attiva lega</button></form>}</Card>
-            <Card title="Assegna le squadre"><div className="space-y-8">{members.map((member) => {
-              const team = teams.find((item) => item.user_id === member.user_id);
-              return <form action={saveTeam} key={member.user_id} className="space-y-3 border-t border-zinc-200 pt-5">
-                <h3 className="font-bold">{ownerName(member.user_id)} <span className="text-sm font-normal text-zinc-500">{member.role}</span></h3>
-                <input type="hidden" name="league_id" value={selected.id} /><input type="hidden" name="user_id" value={member.user_id} />
-                <input name="name" required minLength={2} defaultValue={team?.name ?? ''} placeholder="Nome squadra" className="w-full rounded-lg border p-2" />
-                <div className="grid gap-3 md:grid-cols-4">
-                  {[1,2,3].map((n) => <select required key={n} name={`driver_${['one','two','three'][n-1]}_id`}
-                    defaultValue={team?.[`driver_${['one','two','three'][n-1]}_id` as keyof Team] ?? ''}
-                    className="rounded-lg border p-2"><option value="">Pilota {n}</option>
-                    {drivers.map((d) => <option key={d.id} value={d.id}>{driverName(d.id)}</option>)}</select>)}
-                  <select required name="constructor_id" defaultValue={team?.constructor_id ?? ''} className="rounded-lg border p-2">
-                    <option value="">Scuderia</option>{constructorRows.map((row) => <option key={row.constructor_id} value={row.constructor_id}>{constructorName(row.constructor_id)}</option>)}
-                  </select>
-                </div><button className="rounded-lg bg-zinc-950 px-4 py-2 font-bold text-white">Salva squadra</button>
-              </form>;
-            })}</div></Card>
-            <Card title="Squadre per i ragazzi non ancora registrati">
-              <p className="mb-5 text-sm text-zinc-600">Prepara una squadra indicando il nome del ragazzo. Quando si registra ed entra con il codice invito, assegnagli qui la squadra già pronta.</p>
+            <div>
+              <h2 className="text-2xl font-black">Gestione squadre</h2>
+              <p className="mt-1 text-sm text-zinc-600">{teams.length} squadre assegnate · {drafts.length} da assegnare · {members.length} partecipanti nella lega</p>
+            </div>
+            <Card title="Prepara una squadra">
+              <p className="mb-5 text-sm text-zinc-600">Inserisci il nome del partecipante e scegli la rosa. Puoi farlo anche prima che entri nella lega.</p>
               <TeamDraftForm leagueId={selected.id} drivers={drivers} constructorRows={constructorRows}
                 driverName={driverName} />
-              {drafts.map((draft) => <div key={draft.id} className="mt-8 border-t border-zinc-200 pt-6">
-                <TeamDraftForm leagueId={selected.id} draft={draft} drivers={drivers}
-                  constructorRows={constructorRows} driverName={driverName} />
+            </Card>
+            <Card title={`Squadre da assegnare (${drafts.length})`}>
+              {!drafts.length && <p className="text-sm text-zinc-600">Non hai ancora preparato altre squadre.</p>}
+              <div className="space-y-5">{drafts.map((draft) => <div key={draft.id} className="rounded-xl border border-zinc-200 p-4">
+                <h3 className="font-bold">{draft.name} <span className="font-normal text-zinc-500">· {draft.player_name}</span></h3>
+                <p className="mt-1 text-sm text-zinc-600">{driverName(draft.driver_one_id)}, {driverName(draft.driver_two_id)}, {driverName(draft.driver_three_id)} · {constructorName(draft.constructor_id)}</p>
                 <div className="mt-4 flex flex-wrap items-end gap-3">
                   <form action={assignTeamDraft} className="flex flex-wrap items-end gap-3">
                     <input type="hidden" name="league_id" value={selected.id} />
                     <input type="hidden" name="draft_id" value={draft.id} />
-                    <label className="text-sm font-semibold">Assegna a un membro entrato nella lega
+                    <label className="text-sm font-semibold">Assegna a
                       <select name="user_id" required defaultValue="" className="mt-1 block rounded-lg border p-2.5">
                         <option value="">Seleziona partecipante</option>
                         {membersWithoutTeam.map((member) => <option key={member.user_id} value={member.user_id}>
                           {ownerName(member.user_id)}</option>)}
                       </select>
                     </label>
-                    <button disabled={!membersWithoutTeam.length} className="rounded-lg bg-red-600 px-4 py-2.5 font-bold text-white disabled:opacity-50">Assegna squadra</button>
+                    <button disabled={!membersWithoutTeam.length} className="rounded-lg bg-red-600 px-4 py-2.5 font-bold text-white disabled:opacity-50">Assegna</button>
                   </form>
                   <form action={deleteTeamDraft}>
                     <input type="hidden" name="league_id" value={selected.id} />
                     <input type="hidden" name="draft_id" value={draft.id} />
-                    <button className="rounded-lg border border-zinc-300 px-4 py-2.5 font-bold">Elimina bozza</button>
+                    <button className="rounded-lg border border-zinc-300 px-4 py-2.5 font-bold">Elimina</button>
                   </form>
                 </div>
-              </div>)}
+                {!membersWithoutTeam.length && <p className="mt-3 text-sm text-zinc-500">Per assegnarla, il partecipante deve entrare nella lega con il codice invito.</p>}
+                <details className="mt-4 border-t border-zinc-200 pt-4">
+                  <summary className="cursor-pointer text-sm font-semibold text-red-700">Modifica squadra</summary>
+                  <div className="mt-4"><TeamDraftForm leagueId={selected.id} draft={draft} drivers={drivers}
+                    constructorRows={constructorRows} driverName={driverName} /></div>
+                </details>
+              </div>)}</div>
+            </Card>
+            <Card title={`Partecipanti nella lega (${members.length})`}>
+              <div className="space-y-4">{members.map((member) => {
+                const team = teams.find((item) => item.user_id === member.user_id);
+                return <details key={member.user_id} open={!team} className="rounded-xl border border-zinc-200 p-4">
+                  <summary className="cursor-pointer font-bold">{ownerName(member.user_id)}
+                    <span className="ml-2 text-sm font-normal text-zinc-500">{team ? team.name : 'Squadra da assegnare'}</span>
+                  </summary>
+                  <form action={saveTeam} className="mt-4 space-y-3">
+                    <input type="hidden" name="league_id" value={selected.id} /><input type="hidden" name="user_id" value={member.user_id} />
+                    <input name="name" required minLength={2} defaultValue={team?.name ?? ''} placeholder="Nome squadra" className="w-full rounded-lg border p-2" />
+                    <div className="grid gap-3 md:grid-cols-4">
+                      {[1,2,3].map((n) => <select required key={n} name={`driver_${['one','two','three'][n-1]}_id`}
+                        defaultValue={team?.[`driver_${['one','two','three'][n-1]}_id` as keyof Team] ?? ''}
+                        className="rounded-lg border p-2"><option value="">Pilota {n}</option>
+                        {drivers.map((d) => <option key={d.id} value={d.id}>{driverName(d.id)}</option>)}</select>)}
+                      <select required name="constructor_id" defaultValue={team?.constructor_id ?? ''} className="rounded-lg border p-2">
+                        <option value="">Scuderia</option>{constructorRows.map((row) => <option key={row.constructor_id} value={row.constructor_id}>{constructorName(row.constructor_id)}</option>)}
+                      </select>
+                    </div><button className="rounded-lg bg-zinc-950 px-4 py-2 font-bold text-white">{team ? 'Aggiorna squadra' : 'Crea squadra'}</button>
+                  </form>
+                </details>;
+              })}</div>
+            </Card>
+            <Card title="Inviti e attivazione"><p>Codice invito: <strong className="font-mono text-lg">{selected.invite_code}</strong></p>
+              <p className="mt-2 text-sm text-zinc-500">La lega si attiva con 4–7 membri, ciascuno con una squadra completa.</p>
+              {selected.status === 'recruiting' && <form action={activateLeague} className="mt-4">
+                <input type="hidden" name="league_id" value={selected.id} />
+                <button className="rounded-lg bg-red-600 px-4 py-2 font-bold text-white">Attiva lega</button></form>}
             </Card>
           </>}
         </section>
@@ -323,11 +351,11 @@ function TeamDraftForm({ leagueId, draft, drivers, constructorRows, driverName }
   driverName: (id: number) => string;
 }) {
   return <form action={saveTeamDraft} className="space-y-3">
-    <h3 className="font-bold">{draft ? `Squadra preparata per ${draft.player_name}` : 'Prepara una nuova squadra'}</h3>
+    {draft && <h3 className="font-bold">{draft.player_name}</h3>}
     <input type="hidden" name="league_id" value={leagueId} />
     {draft && <input type="hidden" name="draft_id" value={draft.id} />}
     <div className="grid gap-3 sm:grid-cols-2">
-      <label className="text-sm font-semibold">Nome del ragazzo
+      <label className="text-sm font-semibold">Nome del partecipante
         <input name="player_name" required minLength={2} maxLength={80} defaultValue={draft?.player_name ?? ''}
           placeholder="Es. Marco" className="mt-1 block w-full rounded-lg border p-2.5" />
       </label>
@@ -355,7 +383,7 @@ function TeamDraftForm({ leagueId, draft, drivers, constructorRows, driverName }
       </label>
     </div>
     <button className="rounded-lg bg-zinc-950 px-4 py-2.5 font-bold text-white">
-      {draft ? 'Aggiorna squadra in attesa' : 'Salva squadra in attesa'}
+      {draft ? 'Salva modifiche' : 'Prepara squadra'}
     </button>
   </form>;
 }
