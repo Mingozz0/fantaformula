@@ -1,12 +1,10 @@
 'use client';
 
-import { useTransition, type ReactNode } from 'react';
-import { useRouter } from 'next/navigation';
+import { type ReactNode } from 'react';
 import { ClipboardList, Flag, Gauge, House, LogOut, Settings2, Trophy, Users, X } from 'lucide-react';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton,
   SidebarMenuItem, SidebarProvider, SidebarSeparator, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { NavigationLink, SubmitButton } from './action-feedback';
 import { leagueStatusLabel } from '@/lib/labels';
 import { signOut } from '@/app/home/actions';
@@ -25,8 +23,6 @@ const sections = [
 
 function PortalSidebar({ name, leagues, selectedLeagueId, activeTab, isAdmin, isManager }: Omit<ShellProps, 'children' | 'defaultOpen'>) {
   const { setOpenMobile } = useSidebar();
-  const router = useRouter();
-  const [switching, startTransition] = useTransition();
   const selected = leagues.find((league) => league.id === selectedLeagueId);
   const href = (tab: string) => selectedLeagueId ? `/home?${new URLSearchParams({ league: selectedLeagueId, tab })}` : '/home';
   const closeMenu = () => setOpenMobile(false);
@@ -40,22 +36,20 @@ function PortalSidebar({ name, leagues, selectedLeagueId, activeTab, isAdmin, is
         <button type="button" onClick={closeMenu} className="grid size-10 place-items-center rounded-lg text-zinc-400 hover:bg-white/10 hover:text-white md:hidden" aria-label="Chiudi menu"><X className="size-5" /></button>
       </div>
       {selected && <div className="space-y-2">
-        <label htmlFor="portal-league" className="text-[11px] font-bold uppercase tracking-widest text-zinc-500">La tua lega</label>
-        {leagues.length > 1 ? <Select value={selected.id} disabled={switching} onValueChange={(league) => {
-          closeMenu(); startTransition(() => router.push(`/home?${new URLSearchParams({ league, tab: 'overview' })}`));
-        }}>
-          <SelectTrigger id="portal-league" className="h-11! w-full rounded-xl border-zinc-700 bg-zinc-900 text-white"><SelectValue /></SelectTrigger>
-          <SelectContent position="popper">{leagues.map((league) => <SelectItem key={league.id} value={league.id}>{league.name}</SelectItem>)}</SelectContent>
-        </Select> : <p id="portal-league" className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-sm font-bold text-white">{selected.name}</p>}
+        <p className="text-[11px] font-bold uppercase tracking-widest text-zinc-500">Lega selezionata</p>
+        <p className="rounded-xl border border-zinc-800 bg-zinc-900 px-3 py-3 text-sm font-bold text-white">{selected.name}</p>
         <p className="flex items-center gap-2 text-xs text-zinc-400"><span className={`size-1.5 rounded-full ${selected.status === 'active' ? 'bg-emerald-400' : 'bg-amber-400'}`} />{leagueStatusLabel(selected.status)}</p>
       </div>}
     </SidebarHeader>
     <SidebarSeparator />
     <SidebarContent role="navigation" aria-label="Menu principale" className="px-3 py-3" style={{ scrollbarWidth: 'thin', scrollbarColor: '#3f3f46 transparent' }}>
       <SidebarGroup className="p-0">
-        <SidebarGroupLabel className="px-3 text-[11px] uppercase tracking-widest text-zinc-500">La stagione</SidebarGroupLabel>
+        <SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild isActive={activeTab === 'home'} className="mb-3 h-11! rounded-xl px-3 font-medium data-[active=true]:bg-red-600 data-[active=true]:text-white">
+          <NavigationLink href="/home" onClick={closeMenu} aria-current={activeTab === 'home' ? 'page' : undefined}><House className="size-4" /><span>Le mie leghe</span></NavigationLink>
+        </SidebarMenuButton></SidebarMenuItem></SidebarMenu>
+        {selected && <SidebarGroupLabel className="px-3 text-[11px] uppercase tracking-widest text-zinc-500">La stagione</SidebarGroupLabel>}
         <SidebarGroupContent><SidebarMenu className="gap-1">
-          {sections.filter((section) => selected || section.id === 'overview').map(({ id, label, icon: Icon }) => <SidebarMenuItem key={id}>
+          {sections.filter(() => selected).map(({ id, label, icon: Icon }) => <SidebarMenuItem key={id}>
             <SidebarMenuButton asChild isActive={activeTab === id} className="h-11! rounded-xl px-3 font-medium data-[active=true]:bg-red-600 data-[active=true]:text-white">
               <NavigationLink href={href(id)} onClick={closeMenu} aria-current={activeTab === id ? 'page' : undefined}><Icon className="size-4" /><span>{label}</span></NavigationLink>
             </SidebarMenuButton>
@@ -83,7 +77,7 @@ function PortalSidebar({ name, leagues, selectedLeagueId, activeTab, isAdmin, is
 
 export function PortalShell({ children, defaultOpen = true, ...props }: ShellProps) {
   const title = sections.find((section) => section.id === props.activeTab)?.label
-    ?? (props.activeTab === 'manager' ? 'Gestisci risultati' : 'Gestione squadre');
+    ?? (props.activeTab === 'manager' ? 'Gestisci risultati' : props.activeTab === 'home' ? 'Le mie leghe' : 'Gestione squadre');
   const initials = props.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('');
   return <SidebarProvider defaultOpen={defaultOpen} className="min-h-svh bg-[#f6f6f4] text-zinc-950">
     <a href="#contenuto" className="sr-only z-[100] rounded-lg bg-white p-3 text-sm font-bold focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Vai al contenuto</a>

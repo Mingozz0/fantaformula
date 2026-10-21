@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:scoring": "node scripts/test-scoring.mjs"
+    "test:scoring": "node scripts/test-scoring.mjs",
+    "test:portal": "node scripts/test-portal.mjs"
   },
   "dependencies": {
     "@radix-ui/react-select": "2.4.1",

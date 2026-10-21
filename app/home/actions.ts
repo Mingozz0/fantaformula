@@ -3,17 +3,11 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { homeUrl as home } from '@/lib/portal-navigation';
 
 function textField(form: FormData, key: string) { return String(form.get(key) ?? '').trim(); }
 function numberField(form: FormData, key: string) { return Number(textField(form, key)); }
 function normalizedName(value: string) { return value.trim().replace(/\s+/g, ' '); }
-function home(leagueId?: string, tab?: string, message?: string) {
-  const params = new URLSearchParams();
-  if (leagueId) params.set('league', leagueId);
-  if (tab) params.set('tab', tab);
-  if (message) params.set('message', message);
-  return `/home?${params}`;
-}
 async function authenticated() {
   const supabase = await createClient();
   const { data, error } = await supabase.auth.getClaims();
@@ -164,20 +158,20 @@ export async function saveLineup(form: FormData) {
   const { data: race } = await supabase.from('races').select('season_id,lineup_deadline_at')
     .eq('id', raceId).single();
   if (!team || !race || team.season_id !== race.season_id || !one || !two || one === two) {
-    redirect(home(leagueId, 'lineup', 'Formazione non valida'));
+    redirect(home(leagueId, 'lineup', 'Formazione non valida', raceId));
   }
   const roster: number[] = [team.driver_one_id, team.driver_two_id, team.driver_three_id];
   const reserve = roster.find((id) => id !== one && id !== two);
   if (!roster.includes(one) || !roster.includes(two) || !reserve) {
-    redirect(home(leagueId, 'lineup', 'I piloti devono appartenere alla rosa'));
+    redirect(home(leagueId, 'lineup', 'I piloti devono appartenere alla rosa', raceId));
   }
   const retroactive = race.lineup_deadline_at && Date.now() >= Date.parse(race.lineup_deadline_at);
   if (retroactive) {
     const { data: member } = await supabase.from('league_members').select('role')
       .eq('league_id', leagueId).eq('user_id', userId).single();
-    if (member?.role !== 'admin') redirect(home(leagueId, 'lineup', 'Scadenza superata'));
+    if (member?.role !== 'admin') redirect(home(leagueId, 'lineup', 'Scadenza superata', raceId));
   } else if (team.user_id !== userId) {
-    redirect(home(leagueId, 'lineup', 'Puoi modificare solo la tua formazione'));
+    redirect(home(leagueId, 'lineup', 'Puoi modificare solo la tua formazione', raceId));
   }
   const payload = { driver_one_id: one, driver_two_id: two, reserve_driver_id: reserve,
     captain_driver_id: null, retroactive: Boolean(retroactive) };
@@ -187,7 +181,7 @@ export async function saveLineup(form: FormData) {
     ? await supabase.from('lineups').update(payload).eq('id', existing.id)
     : await supabase.from('lineups').insert({ ...payload, fantasy_team_id: teamId,
       league_id: leagueId, season_id: team.season_id, race_id: raceId });
-  if (response.error) redirect(home(leagueId, 'lineup', response.error.message));
+  if (response.error) redirect(home(leagueId, 'lineup', response.error.message, raceId));
   revalidatePath('/home');
-  redirect(home(leagueId, 'lineup', retroactive ? 'Formazione passata registrata' : 'Formazione salvata'));
+  redirect(home(leagueId, 'lineup', retroactive ? 'Formazione passata registrata' : 'Formazione salvata', raceId));
 }

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
+import { validatePositions } from '@/lib/result-validation';
 
 function field(form: FormData, key: string) { return String(form.get(key) ?? '').trim(); }
 function message(raceId: number, event: string, value: string, leagueId?: string) {
@@ -28,7 +29,7 @@ export async function saveResults(form: FormData) {
   if (!raceId || !['gp', 'sprint'].includes(event)) redirect('/manager');
   const { data: race } = await supabase.from('races').select('season_id,has_sprint').eq('id', raceId).single();
   if (!race || (event === 'sprint' && !race.has_sprint)) redirect(message(raceId, event, 'Gara non valida', leagueId));
-  const { data: drivers } = await supabase.from('season_drivers').select('driver_id,constructor_id')
+  const { data: drivers } = await supabase.from('season_drivers').select('driver_id,constructor_id,drivers!inner(first_name,last_name)')
     .eq('season_id', race.season_id);
   if (!drivers?.length) redirect(message(raceId, event, 'Piloti mancanti', leagueId));
   const fastest = Number(field(form, 'fastest_driver_id'));
@@ -37,24 +38,15 @@ export async function saveResults(form: FormData) {
   if (!fastest || (event === 'gp' && (!dotd || !pit))) {
     redirect(message(raceId, event, 'Seleziona il giro veloce e, per il Gran Premio, il pilota del giorno e la migliore sosta ai box', leagueId));
   }
-  const gridSet = new Set<number>();
-  const finishSet = new Set<number>();
   const rows = [];
   for (const driver of drivers) {
     const id = driver.driver_id;
     const status = field(form, `status_${id}`);
-    const grid = Number(field(form, `grid_${id}`)) || null;
-    const finish = Number(field(form, `finish_${id}`)) || null;
+    const gridValue = field(form, `grid_${id}`);
+    const finishValue = field(form, `finish_${id}`);
+    const grid = gridValue === '' ? null : Number(gridValue);
+    const finish = finishValue === '' ? null : Number(finishValue);
     const constructorId = Number(field(form, `constructor_${id}`)) || driver.constructor_id;
-    if (!['finished','dnf','dns','dsq'].includes(status)
-      || (status === 'finished' && !finish)
-      || (status !== 'finished' && finish)
-      || (grid !== null && (grid < 1 || grid > 30 || gridSet.has(grid)))
-      || (finish !== null && (finish < 1 || finish > 30 || finishSet.has(finish)))) {
-      redirect(message(raceId, event, `Controlla posizione e stato del pilota ${id}`, leagueId));
-    }
-    if (grid !== null) gridSet.add(grid);
-    if (finish !== null) finishSet.add(finish);
     rows.push({ race_id: raceId, season_id: race.season_id, driver_id: id,
       constructor_id: constructorId, grid_position: grid, finish_position: finish,
       result_status: status, formation_lap: form.get(`formation_${id}`) === 'on',
@@ -62,6 +54,12 @@ export async function saveResults(form: FormData) {
       ...(event === 'gp' ? { driver_of_the_day: dotd === id } : {}),
     });
   }
+  const positionErrors = validatePositions(rows.map((row) => {
+    const driver = drivers.find((entry) => entry.driver_id === row.driver_id)!;
+    const person = driver.drivers as unknown as { first_name: string; last_name: string };
+    return { ...row, name: `${person.first_name} ${person.last_name}` };
+  }));
+  if (positionErrors.length) redirect(message(raceId, event, positionErrors[0].message, leagueId));
   const table = event === 'gp' ? 'race_driver_results' : 'sprint_driver_results';
   const { error } = await supabase.from(table).upsert(rows, { onConflict: 'race_id,driver_id' });
   if (error) redirect(message(raceId, event, error.message, leagueId));

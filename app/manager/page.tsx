@@ -1,12 +1,11 @@
 import { NavigationLink as Link, SubmitButton } from '@/app/components/action-feedback';
-import { FormSelect } from '@/app/components/form-select';
 import { PortalShell, type PortalLeague } from '@/app/components/portal-shell';
 import { RacePicker } from '@/app/components/race-picker';
-import { DriverResultFields } from '@/app/components/driver-result-fields';
+import { ResultsEditor } from '@/app/components/results-editor';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
-import { publishResults, saveResults } from './actions';
+import { publishResults } from './actions';
 
 type Race = { id: number; round: number; name: string; has_sprint: boolean;
   gp_published: boolean; sprint_published: boolean; race_date: string | null };
@@ -55,8 +54,6 @@ export default async function ManagerPage({ searchParams }: {
   ]);
   const drivers = (driversData ?? []) as Driver[];
   const results = (resultsData ?? []) as Result[];
-  const fastestId = results.find((item) => item.fastest_lap)?.driver_id;
-  const dotdId = results.find((item) => item.driver_of_the_day)?.driver_id;
   const pitId = (pitData ?? []).find((item) => item.fastest_pit_stop)?.constructor_id;
   const driverName = (id: number) => { const d = drivers.find((item) => item.id === id); return d ? `${d.first_name} ${d.last_name}` : `Pilota ${id}`; };
   return <PortalShell defaultOpen={sidebarOpen} name={profile?.display_name ?? 'Il tuo account'} leagues={leagues} selectedLeagueId={league?.id} activeTab="manager" isAdmin={isAdmin} isManager>
@@ -72,28 +69,9 @@ export default async function ManagerPage({ searchParams }: {
       <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-6">
         <h2 className="text-2xl font-black">{selected.name} · {event === 'gp' ? 'GP' : 'Sprint'}</h2>
         <p className="mt-1 text-sm text-zinc-500">{results.length}/{roster.length} piloti registrati · {(event === 'gp' ? selected.gp_published : selected.sprint_published) ? 'pubblicato' : 'non pubblicato'}</p>
-        <form key={`${selected.id}-${event}`} action={saveResults} className="mt-6 space-y-6"><input type="hidden" name="race_id" value={selected.id} />
-          <input type="hidden" name="league_id" value={league?.id ?? ''} />
-          <input type="hidden" name="event" value={event} />
-          <div className="grid gap-3 md:grid-cols-3">
-            <FormSelect label="Giro veloce" required name="fastest_driver_id" defaultValue={fastestId}
-              options={roster.map((row) => ({ value: row.driver_id, label: driverName(row.driver_id) }))} />
-            {event === 'gp' && <>
-              <FormSelect label="Pilota del giorno" required name="dotd_driver_id" defaultValue={dotdId}
-                options={roster.map((row) => ({ value: row.driver_id, label: driverName(row.driver_id) }))} />
-              <FormSelect label="Migliore sosta ai box" required name="pit_constructor_id" defaultValue={pitId}
-                options={constructors.map((row) => ({ value: row.constructor_id, label: row.display_name }))} />
-            </>}
-          </div>
-          <div className="grid items-start gap-5 lg:grid-cols-2">{roster.map((row) => {
-            const result = results.find((item) => item.driver_id === row.driver_id);
-            return <DriverResultFields key={row.driver_id} driverId={row.driver_id} name={driverName(row.driver_id)} constructorId={row.constructor_id} constructors={constructors} result={result} />;
-          })}</div>
-          <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-sm backdrop-blur-sm">
-            <p className="hidden text-xs text-zinc-500 sm:block">Controlla le schede prima di salvare.</p>
-            <SubmitButton className="min-h-11 w-full rounded-xl bg-red-600 px-5 py-3 font-bold text-white sm:w-auto">Salva risultati {event === 'gp' ? 'GP' : 'Sprint'}</SubmitButton>
-          </div>
-        </form>
+        <ResultsEditor key={`${selected.id}-${event}`} raceId={selected.id} event={event} leagueId={league?.id}
+          drivers={roster.map((row) => ({ id: row.driver_id, name: driverName(row.driver_id), constructorId: row.constructor_id }))}
+          constructors={constructors} results={results} pitId={event === 'gp' ? pitId : undefined} />
         <form action={publishResults} className="mt-5 border-t border-zinc-200 pt-5"><input type="hidden" name="race_id" value={selected.id} />
           <input type="hidden" name="league_id" value={league?.id ?? ''} />
           <input type="hidden" name="event" value={event} /><SubmitButton pendingLabel="Pubblicazione…" className="rounded-lg bg-zinc-950 px-5 py-3 font-bold text-white">Pubblica risultati</SubmitButton>

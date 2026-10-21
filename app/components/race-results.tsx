@@ -1,6 +1,6 @@
 import { ArrowRight, ChevronDown, Flag, Medal, Timer, Trophy, Wrench } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { driverStatusLabel, signedPoints } from '@/lib/labels';
 import { explainConstructorScore, explainDriverScore, scoreEvent,
@@ -103,22 +103,24 @@ export function RaceResults({ race, races, leagueId, teams, drivers, constructor
     </div>
     {!published && <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">I risultati di questa tappa non sono ancora pubblicati. I punti compariranno dopo la pubblicazione.</div>}
     {published && <Tabs defaultValue="league" key={race.id} className="gap-6">
-      <TabsList className="grid h-auto w-full grid-cols-2 rounded-xl bg-zinc-200/60 p-1 sm:inline-flex sm:w-fit">
-        <TabsTrigger value="league" className="min-h-11 min-w-0 gap-1.5 whitespace-normal rounded-lg px-2 py-2 text-xs leading-tight sm:gap-2 sm:px-4 sm:text-sm"><Trophy className="size-4 shrink-0" />Punti della lega</TabsTrigger>
-        <TabsTrigger value="drivers" className="min-h-11 min-w-0 gap-1.5 whitespace-normal rounded-lg px-2 py-2 text-xs leading-tight sm:gap-2 sm:px-4 sm:text-sm"><Flag className="size-4 shrink-0" />Risultati dei piloti</TabsTrigger>
+      <TabsList className="grid h-14! w-full max-w-lg grid-cols-2 items-stretch rounded-xl bg-zinc-200/60 p-1">
+        <TabsTrigger value="league" className="h-full! min-w-0 gap-1.5 whitespace-normal rounded-lg px-2 text-xs leading-tight sm:gap-2 sm:px-4 sm:text-sm"><Trophy className="size-4 shrink-0" />Punti della lega</TabsTrigger>
+        <TabsTrigger value="drivers" className="h-full! min-w-0 gap-1.5 whitespace-normal rounded-lg px-2 text-xs leading-tight sm:gap-2 sm:px-4 sm:text-sm"><Flag className="size-4 shrink-0" />Punti dei piloti</TabsTrigger>
       </TabsList>
       <TabsContent value="league" className="space-y-5">
-        <p className="text-sm leading-relaxed text-zinc-500">Il totale somma i due piloti schierati e la scuderia. Apri il dettaglio di un pilota per vedere bonus e penalità. La riserva compare quando sostituisce un titolare.</p>
+        <p className="text-sm leading-relaxed text-zinc-500">Il totale somma i due piloti schierati e la scuderia. Apri una squadra per vedere i punti di piloti e scuderia, i bonus e le penalità.</p>
         {!rules && <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Regolamento non disponibile: impossibile calcolare i punteggi.</p>}
-        <div className="grid items-start gap-5 xl:grid-cols-2">{rules && entries.map((entry) => <Card key={entry.team.id} className="gap-0 overflow-hidden rounded-2xl border-zinc-200 py-0 shadow-xs">
-          <CardHeader className="gap-0 border-b border-zinc-100 bg-white p-5">
+        <div className="grid items-start gap-5 xl:grid-cols-2">{rules && entries.map((entry) => <details key={entry.team.id} className="group/team overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xs">
+          <summary className="flex h-40 cursor-pointer list-none flex-col justify-between gap-3 p-4 sm:p-5 [&::-webkit-details-marker]:hidden">
             <div className="flex items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-3">
               <span className={`grid size-10 shrink-0 place-items-center rounded-xl text-sm font-black ${entry.total === entries[0]?.total ? 'bg-amber-100 text-amber-800' : 'bg-zinc-100 text-zinc-500'}`}>
                 {1 + entries.filter((other) => other.total > entry.total).length}º</span>
               <div className="min-w-0"><h4 className="truncate font-black">{entry.team.name}</h4><p className="mt-0.5 truncate text-xs text-zinc-500">{profiles.find((profile) => profile.id === entry.team.user_id)?.display_name ?? 'Partecipante'}</p></div>
-            </div><Points value={entry.total} large /></div>
-          </CardHeader>
-          <CardContent className="space-y-5 p-5">{events.map((event, index) => {
+            </div><span className="shrink-0"><Points value={entry.total} /></span></div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500">{events.map((event, index) => <span key={event.key}>{event.sprint ? 'Sprint' : 'GP'}: <strong className="text-zinc-800">{entry.scores[index] ? `${entry.scores[index]!.total} pt` : 'In attesa'}</strong></span>)}</div>
+            <span className="flex items-center justify-between text-xs font-semibold text-red-700"><span><span className="group-open/team:hidden">Mostra dettagli</span><span className="hidden group-open/team:inline">Chiudi dettagli</span></span><ChevronDown className="size-4 transition-transform group-open/team:rotate-180" /></span>
+          </summary>
+          <div className="space-y-5 border-t border-zinc-100 p-4 sm:p-5">{events.map((event, index) => {
             const score = entry.scores[index];
             const replaced = entry.lineup && score?.reserveUsed
               ? [entry.lineup.driver_one_id, entry.lineup.driver_two_id].find((id) => !score.driverIds.includes(id)) : undefined;
@@ -132,14 +134,14 @@ export function RaceResults({ race, races, leagueId, teams, drivers, constructor
                 </div>
               </>}
             </section>;
-          })}</CardContent>
-        </Card>)}</div>
+          })}</div>
+        </details>)}</div>
         {!teams.length && <p className="text-sm text-zinc-500">Nessuna squadra assegnata nella lega.</p>}
       </TabsContent>
       <TabsContent value="drivers" className="space-y-8">{events.filter((event) => event.published).map((event) => <section key={event.key} className="space-y-4">
         <div><h3 className="text-lg font-black">{event.label} · Ordine di arrivo</h3><p className="mt-1 text-sm text-zinc-500">I punti indicati sono quelli del singolo pilota, prima dell’abbinamento alle formazioni.</p></div>
-        <div className="grid items-start gap-3 md:grid-cols-2">{event.results.toSorted((a, b) => (a.finish_position ?? Infinity) - (b.finish_position ?? Infinity) || driverName(a.driver_id).localeCompare(driverName(b.driver_id), 'it')).map((result) =>
-          <Card key={result.driver_id} className="gap-0 rounded-2xl py-0 shadow-none"><CardContent className="p-4">
+        <div className="grid auto-rows-fr gap-3 md:grid-cols-2">{event.results.toSorted((a, b) => (a.finish_position ?? Infinity) - (b.finish_position ?? Infinity) || driverName(a.driver_id).localeCompare(driverName(b.driver_id), 'it')).map((result) =>
+          <Card key={result.driver_id} className="h-full gap-0 rounded-2xl py-0 shadow-none"><CardContent className="flex h-full flex-col p-4">
             <div className="flex items-start gap-3"><span className={`grid size-10 shrink-0 place-items-center rounded-xl text-sm font-black ${result.finish_position !== null && result.finish_position <= 3 ? 'bg-amber-100 text-amber-800' : 'bg-zinc-100 text-zinc-500'}`}>{result.finish_position ? `${result.finish_position}º` : '—'}</span>
               <div className="min-w-0 flex-1"><h4 className="font-bold">{driverName(result.driver_id)}</h4><p className="mt-0.5 text-xs text-zinc-500">{result.constructor_id ? constructorName(result.constructor_id) : 'Scuderia non disponibile'}</p></div>
               {rules && <Points value={explainDriverScore(result, rules, event.sprint).total} />}

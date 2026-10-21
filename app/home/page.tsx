@@ -3,6 +3,8 @@ import { FormSelect } from '@/app/components/form-select';
 import { RaceResults } from '@/app/components/race-results';
 import { RacePicker } from '@/app/components/race-picker';
 import { PortalShell } from '@/app/components/portal-shell';
+import { LineupSelection } from '@/app/components/lineup-selection';
+import { LeagueEntrance } from '@/app/components/league-entrance';
 import { leagueStatusLabel } from '@/lib/labels';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
@@ -60,15 +62,15 @@ export default async function HomePage({ searchParams }: {
   if (membershipsError) throw new Error('Impossibile caricare le leghe. Riprova tra poco.');
   const memberships = (membershipsData ?? []) as unknown as Membership[];
   const leagues = memberships.map((membership) => membership.leagues);
-  const selected = leagues.find((league) => league.id === params.league) ?? leagues[0];
+  const selected = leagues.find((league) => league.id === params.league);
   const tab = ['overview', 'team', 'lineup', 'standings', 'results', 'manage'].includes(params.tab ?? '')
     ? params.tab! : 'overview';
   if (!selected) {
     const { data: profile } = await supabase.from('profiles').select('display_name').eq('id', userId).maybeSingle();
-    return <PortalShell defaultOpen={sidebarOpen} name={profile?.display_name ?? 'Il tuo account'} leagues={[]} activeTab="overview" isAdmin={false} isManager={Boolean(managerData)}>
-      <div className="rounded-2xl bg-white p-5 shadow-sm sm:p-8"><h1 className="text-3xl font-black">Inizia la tua stagione</h1>
-        <p className="mt-2 text-zinc-600">Crea una lega 2026 o inserisci il codice ricevuto da un amico.</p>
-        <LeagueForms /></div></PortalShell>;
+    return <PortalShell defaultOpen={sidebarOpen} name={profile?.display_name ?? 'Il tuo account'} leagues={leagues} activeTab="home" isAdmin={false} isManager={Boolean(managerData)}>
+      {params.message && <p role="status" className="rounded-xl bg-amber-100 p-3 text-sm text-amber-950">{params.message}</p>}
+      <LeagueEntrance leagues={memberships.map((membership) => ({ ...membership.leagues, role: membership.role }))}><LeagueForms /></LeagueEntrance>
+    </PortalShell>;
   }
 
   const isAdmin = memberships.some((membership) =>
@@ -166,7 +168,6 @@ export default async function HomePage({ searchParams }: {
                   : <p className="mt-4 text-sm text-amber-800">La lega deve essere attivata prima di schierare la formazione.</p>}</>
                 : <p>Non ci sono formazioni future da inviare.</p>}
             </Card>
-            <Card title="Le tue leghe"><LeagueForms /></Card>
           </>}
 
           {tab === 'team' && <Card title={myTeam?.name ?? 'Squadra in attesa'}>
@@ -337,15 +338,13 @@ function LineupForm({ leagueId, race, team, lineup, driverName }: {
   leagueId: string; race: Race; team: Team; lineup?: Lineup; driverName: (id: number) => string;
 }) {
   const roster = [team.driver_one_id, team.driver_two_id, team.driver_three_id];
-  return <form action={saveLineup} className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+  return <form key={`${race.id}-${team.id}`} action={saveLineup} className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
     <input type="hidden" name="league_id" value={leagueId} />
     <input type="hidden" name="fantasy_team_id" value={team.id} />
     <input type="hidden" name="race_id" value={race.id} />
-    {['one','two'].map((slot, index) => <FormSelect key={slot} label={`Titolare ${index + 1}`} name={`driver_${slot}_id`}
-      required defaultValue={index === 0 ? lineup?.driver_one_id : lineup?.driver_two_id}
-      options={roster.map((id) => ({ value: id, label: driverName(id) }))} />)}
-    <SubmitButton className="self-end rounded-lg bg-red-600 px-4 py-2.5 font-bold text-white">Salva</SubmitButton>
-    <p className="text-xs text-zinc-500 md:col-span-3">La riserva è automaticamente il terzo pilota non schierato.
-      {lineup && ` Ultimo salvataggio: ${lineup.retroactive ? 'recupero dell’amministratore' : 'partecipante'}.`}</p>
+    <LineupSelection key={`${race.id}-${team.id}-${lineup?.driver_one_id}-${lineup?.driver_two_id}`}
+      initialOne={lineup?.driver_one_id} initialTwo={lineup?.driver_two_id}
+      options={roster.map((id) => ({ value: id, label: driverName(id) }))} />
+    {lineup && <p className="text-xs text-zinc-500 md:col-span-3">Ultimo salvataggio: {lineup.retroactive ? 'recupero dell’amministratore' : 'partecipante'}.</p>}
   </form>;
 }
