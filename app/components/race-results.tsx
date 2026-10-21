@@ -85,7 +85,7 @@ export function RaceResults({ race, races, leagueId, teams, drivers, constructor
   return <div className="space-y-6">
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div><h2 className="text-2xl font-black">Il fine settimana di gara</h2><p className="mt-1 text-sm text-zinc-500">Risultati, punti e dettaglio del calcolo.</p></div>
-      <RacePicker races={races} value={race.id} leagueId={leagueId} />
+      <RacePicker races={races} value={race.id} href={`/home?${new URLSearchParams({ league: leagueId, tab: 'results' })}`} />
     </div>
     <div className="overflow-hidden rounded-2xl bg-zinc-950 text-white">
       <div className="border-l-4 border-red-600 p-6 sm:p-8">
@@ -103,9 +103,9 @@ export function RaceResults({ race, races, leagueId, teams, drivers, constructor
     </div>
     {!published && <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">I risultati di questa tappa non sono ancora pubblicati. I punti compariranno dopo la pubblicazione.</div>}
     {published && <Tabs defaultValue="league" key={race.id} className="gap-6">
-      <TabsList className="h-auto w-full justify-start rounded-xl bg-zinc-200/60 p-1 sm:w-fit">
-        <TabsTrigger value="league" className="gap-2 rounded-lg px-4 py-3"><Trophy className="size-4" />Punti della lega</TabsTrigger>
-        <TabsTrigger value="drivers" className="gap-2 rounded-lg px-4 py-3"><Flag className="size-4" />Risultati dei piloti</TabsTrigger>
+      <TabsList className="grid h-auto w-full grid-cols-2 rounded-xl bg-zinc-200/60 p-1 sm:inline-flex sm:w-fit">
+        <TabsTrigger value="league" className="min-h-11 min-w-0 gap-1.5 whitespace-normal rounded-lg px-2 py-2 text-xs leading-tight sm:gap-2 sm:px-4 sm:text-sm"><Trophy className="size-4 shrink-0" />Punti della lega</TabsTrigger>
+        <TabsTrigger value="drivers" className="min-h-11 min-w-0 gap-1.5 whitespace-normal rounded-lg px-2 py-2 text-xs leading-tight sm:gap-2 sm:px-4 sm:text-sm"><Flag className="size-4 shrink-0" />Risultati dei piloti</TabsTrigger>
       </TabsList>
       <TabsContent value="league" className="space-y-5">
         <p className="text-sm leading-relaxed text-zinc-500">Il totale somma i due piloti schierati e la scuderia. Apri il dettaglio di un pilota per vedere bonus e penalità. La riserva compare quando sostituisce un titolare.</p>

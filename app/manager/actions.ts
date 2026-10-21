@@ -5,8 +5,9 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 
 function field(form: FormData, key: string) { return String(form.get(key) ?? '').trim(); }
-function message(raceId: number, event: string, value: string) {
+function message(raceId: number, event: string, value: string, leagueId?: string) {
   const params = new URLSearchParams({ race: String(raceId), event, message: value });
+  if (leagueId) params.set('league', leagueId);
   return `/manager?${params}`;
 }
 async function manager() {
@@ -23,17 +24,18 @@ export async function saveResults(form: FormData) {
   const supabase = await manager();
   const raceId = Number(field(form, 'race_id'));
   const event = field(form, 'event');
+  const leagueId = field(form, 'league_id');
   if (!raceId || !['gp', 'sprint'].includes(event)) redirect('/manager');
   const { data: race } = await supabase.from('races').select('season_id,has_sprint').eq('id', raceId).single();
-  if (!race || (event === 'sprint' && !race.has_sprint)) redirect(message(raceId, event, 'Gara non valida'));
+  if (!race || (event === 'sprint' && !race.has_sprint)) redirect(message(raceId, event, 'Gara non valida', leagueId));
   const { data: drivers } = await supabase.from('season_drivers').select('driver_id,constructor_id')
     .eq('season_id', race.season_id);
-  if (!drivers?.length) redirect(message(raceId, event, 'Piloti mancanti'));
+  if (!drivers?.length) redirect(message(raceId, event, 'Piloti mancanti', leagueId));
   const fastest = Number(field(form, 'fastest_driver_id'));
   const dotd = Number(field(form, 'dotd_driver_id'));
   const pit = Number(field(form, 'pit_constructor_id'));
   if (!fastest || (event === 'gp' && (!dotd || !pit))) {
-    redirect(message(raceId, event, 'Seleziona il giro veloce e, per il Gran Premio, il pilota del giorno e la migliore sosta ai box'));
+    redirect(message(raceId, event, 'Seleziona il giro veloce e, per il Gran Premio, il pilota del giorno e la migliore sosta ai box', leagueId));
   }
   const gridSet = new Set<number>();
   const finishSet = new Set<number>();
@@ -49,7 +51,7 @@ export async function saveResults(form: FormData) {
       || (status !== 'finished' && finish)
       || (grid !== null && (grid < 1 || grid > 30 || gridSet.has(grid)))
       || (finish !== null && (finish < 1 || finish > 30 || finishSet.has(finish)))) {
-      redirect(message(raceId, event, `Controlla posizione e stato del pilota ${id}`));
+      redirect(message(raceId, event, `Controlla posizione e stato del pilota ${id}`, leagueId));
     }
     if (grid !== null) gridSet.add(grid);
     if (finish !== null) finishSet.add(finish);
@@ -62,7 +64,7 @@ export async function saveResults(form: FormData) {
   }
   const table = event === 'gp' ? 'race_driver_results' : 'sprint_driver_results';
   const { error } = await supabase.from(table).upsert(rows, { onConflict: 'race_id,driver_id' });
-  if (error) redirect(message(raceId, event, error.message));
+  if (error) redirect(message(raceId, event, error.message, leagueId));
   if (event === 'gp') {
     const { data: constructors } = await supabase.from('season_constructors').select('constructor_id')
       .eq('season_id', race.season_id);
@@ -71,22 +73,23 @@ export async function saveResults(form: FormData) {
       fastest_pit_stop: constructor.constructor_id === pit }));
     const { error: pitError } = await supabase.from('race_constructor_results')
       .upsert(pitRows, { onConflict: 'race_id,constructor_id' });
-    if (pitError) redirect(message(raceId, event, pitError.message));
+    if (pitError) redirect(message(raceId, event, pitError.message, leagueId));
   }
   revalidatePath('/home');
   revalidatePath('/manager');
-  redirect(message(raceId, event, 'Risultati salvati. Pubblicali dopo la verifica.'));
+  redirect(message(raceId, event, 'Risultati salvati. Pubblicali dopo la verifica.', leagueId));
 }
 
 export async function publishResults(form: FormData) {
   const supabase = await manager();
   const raceId = Number(field(form, 'race_id'));
   const event = field(form, 'event');
+  const leagueId = field(form, 'league_id');
   if (!raceId || !['gp','sprint'].includes(event)) redirect('/manager');
   const column = event === 'gp' ? 'gp_published' : 'sprint_published';
   const { error } = await supabase.from('races').update({ [column]: true }).eq('id', raceId);
-  if (error) redirect(message(raceId, event, error.message));
+  if (error) redirect(message(raceId, event, error.message, leagueId));
   revalidatePath('/home');
   revalidatePath('/manager');
-  redirect(message(raceId, event, 'Risultati pubblicati'));
+  redirect(message(raceId, event, 'Risultati pubblicati', leagueId));
 }

@@ -1,12 +1,15 @@
 import { NavigationLink as Link, SubmitButton } from '@/app/components/action-feedback';
 import { FormSelect } from '@/app/components/form-select';
 import { RaceResults } from '@/app/components/race-results';
+import { RacePicker } from '@/app/components/race-picker';
+import { PortalShell } from '@/app/components/portal-shell';
 import { leagueStatusLabel } from '@/lib/labels';
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { scoreEvent, type DriverResult, type FantasyLineup, type ScoringRules } from '@/lib/scoring';
 import { activateLeague, assignTeamDraft, createLeague, deleteTeamDraft, joinLeague,
-  saveLineup, saveTeam, saveTeamDraft, signOut } from './actions';
+  saveLineup, saveTeam, saveTeamDraft } from './actions';
 
 type League = { id: string; name: string; season_id: number; status: string; invite_code: string };
 type Membership = { league_id: string; role: string; leagues: League };
@@ -49,6 +52,7 @@ export default async function HomePage({ searchParams }: {
   const { data: auth } = await supabase.auth.getClaims();
   const userId = auth?.claims?.sub;
   if (!userId) redirect('/');
+  const sidebarOpen = (await cookies()).get('sidebar_state')?.value !== 'false';
   const [{ data: membershipsData, error: membershipsError }, { data: managerData }] = await Promise.all([
     supabase.from('league_members').select('league_id,role,leagues!inner(id,name,season_id,status,invite_code)').eq('user_id', userId),
     supabase.from('game_managers').select('user_id').eq('user_id', userId).maybeSingle(),
@@ -59,11 +63,13 @@ export default async function HomePage({ searchParams }: {
   const selected = leagues.find((league) => league.id === params.league) ?? leagues[0];
   const tab = ['overview', 'team', 'lineup', 'standings', 'results', 'manage'].includes(params.tab ?? '')
     ? params.tab! : 'overview';
-  if (!selected) return <main className="min-h-screen bg-zinc-100 px-5 py-10 text-zinc-950">
-    <div className="mx-auto max-w-4xl"><Header name="Le tue leghe" manager={Boolean(managerData)} />
-      <div className="mt-10 rounded-2xl bg-white p-8 shadow-sm"><h1 className="text-3xl font-black">Inizia la tua stagione</h1>
+  if (!selected) {
+    const { data: profile } = await supabase.from('profiles').select('display_name').eq('id', userId).maybeSingle();
+    return <PortalShell defaultOpen={sidebarOpen} name={profile?.display_name ?? 'Il tuo account'} leagues={[]} activeTab="overview" isAdmin={false} isManager={Boolean(managerData)}>
+      <div className="rounded-2xl bg-white p-5 shadow-sm sm:p-8"><h1 className="text-3xl font-black">Inizia la tua stagione</h1>
         <p className="mt-2 text-zinc-600">Crea una lega 2026 o inserisci il codice ricevuto da un amico.</p>
-        <LeagueForms /></div></div></main>;
+        <LeagueForms /></div></PortalShell>;
+  }
 
   const isAdmin = memberships.some((membership) =>
     membership.league_id === selected.id && membership.role === 'admin');
@@ -132,28 +138,13 @@ export default async function HomePage({ searchParams }: {
     && ((race.has_sprint && !race.sprint_published) || !race.gp_published
       || teams.some((team) => !lineups.some((lineup) => lineup.fantasy_team_id === team.id && lineup.race_id === race.id))));
 
-  return <main className="min-h-screen bg-[#f6f6f4] text-zinc-950">
-    <div className="mx-auto max-w-7xl px-5 py-7"><Header name={ownerName(userId)} manager={Boolean(managerData)} />
-      <div className="mt-7 grid gap-7 lg:grid-cols-[230px_1fr]">
-        <aside className="h-fit rounded-2xl bg-zinc-950 p-4 text-white lg:sticky lg:top-5">
-          <p className="px-2 text-xs font-bold uppercase tracking-widest text-zinc-500">Lega selezionata</p>
-          <p className="mt-3 rounded-lg bg-zinc-800 p-2 text-sm font-bold">{selected.name} · {leagueStatusLabel(selected.status)}</p>
-          {leagues.length > 1 && <div className="mt-3 space-y-1">{leagues.map((league) =>
-            <Link className={`block rounded-lg px-3 py-2 text-sm ${league.id === selected.id ? 'bg-red-600' : 'hover:bg-zinc-800'}`}
-              key={league.id} href={url(league.id, 'overview')}>{league.name}</Link>)}</div>}
-          <nav className="mt-5 space-y-1">{[
-            ...(isAdmin ? [['manage','Gestione squadre']] : []),
-            ['overview','Panoramica'],['team','La mia squadra'],['lineup','Formazione'],
-            ['standings','Classifica'],['results','Risultati'],
-          ].map(([id,label]) => <Link key={id} href={url(selected.id,id)}
-            className={`block rounded-lg px-3 py-2.5 text-sm font-semibold ${tab === id ? 'bg-red-600' : 'text-zinc-300 hover:bg-zinc-800'}`}>{label}</Link>)}</nav>
-          <form action={signOut}><SubmitButton pendingLabel="Uscita…" className="mt-5 px-3 text-sm text-zinc-400 hover:text-white">Esci</SubmitButton></form>
-        </aside>
+  return <PortalShell defaultOpen={sidebarOpen} name={ownerName(userId)} leagues={leagues} selectedLeagueId={selected.id}
+    activeTab={tab} isAdmin={isAdmin} isManager={Boolean(managerData)}>
         <section className="min-w-0 space-y-6">
           {params.message && <p role="status" className="rounded-xl bg-amber-100 p-3 text-sm font-medium text-amber-950">{params.message}</p>}
           <div><p className="text-xs font-bold uppercase tracking-widest text-red-600">Stagione 2026 · {leagueStatusLabel(selected.status)}</p>
-            <h1 className="mt-1 text-4xl font-black">{selected.name}</h1>
-            <p className="mt-2 text-zinc-500">{members.length} di 7 partecipanti · {isAdmin ? 'Amministratore' : 'Partecipante'}</p></div>
+            <h1 className="mt-1 break-words text-3xl font-black sm:text-4xl">{selected.name}</h1>
+            <p className="mt-2 text-sm text-zinc-500 sm:text-base">{members.length} di 7 partecipanti · {isAdmin ? 'Amministratore' : 'Partecipante'}</p></div>
 
           {tab === 'overview' && <>
             {isAdmin && <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
@@ -162,8 +153,8 @@ export default async function HomePage({ searchParams }: {
               <Link href={url(selected.id, 'manage')}
                 className="mt-4 inline-block rounded-lg bg-red-600 px-4 py-2.5 font-bold text-white">Apri gestione squadre</Link>
             </div>}
-            <div className="grid gap-4 md:grid-cols-3">
-              <Metric label="La tua squadra" value={myTeam?.name ?? 'Da assegnare'} />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <Metric label="La tua squadra" value={myTeam?.name ?? 'Da assegnare'} className="col-span-2 sm:col-span-1" />
               <Metric label="Punti" value={String(standings.find((item) => item.team.user_id === userId)?.points ?? 0)} />
               <Metric label="Prossimo GP" value={nextRace?.name ?? 'Stagione conclusa'} />
             </div>
@@ -187,10 +178,7 @@ export default async function HomePage({ searchParams }: {
           </Card>}
 
           {tab === 'lineup' && <>
-            <Card title="Scegli il Gran Premio"><div className="flex flex-wrap gap-2">{races.map((race) =>
-              <Link key={race.id} href={url(selected.id,'lineup',race.id)}
-                className={`rounded-lg px-3 py-2 text-sm ${raceForLineup?.id === race.id ? 'bg-red-600 text-white' : 'bg-zinc-100'}`}>
-                {race.round}. {race.name}</Link>)}</div></Card>
+            {raceForLineup && <RacePicker races={races} value={raceForLineup.id} href={url(selected.id, 'lineup')} />}
             {raceForLineup && <Card title={`${raceForLineup.name} · ${dateLabel(raceForLineup.race_date)}`}>
               <p className="mb-5 text-sm text-zinc-500">Scadenza {deadlineLabel(raceForLineup.lineup_deadline_at)}. Scegli due titolari; il terzo è la riserva.</p>
               {selected.status !== 'active' && <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Attendi l’attivazione della lega.</p>}
@@ -214,9 +202,9 @@ export default async function HomePage({ searchParams }: {
           {tab === 'standings' && <Card title={`Classifica ${provisional ? '· provvisoria' : ''}`}>
             {!rules && <p className="text-amber-700">Regole di punteggio non ancora disponibili per questa stagione.</p>}
             <div className="mt-4 divide-y divide-zinc-100">{standings.map((entry) =>
-              <div key={entry.team.id} className="grid grid-cols-[45px_1fr_auto] items-center gap-3 py-4">
+              <div key={entry.team.id} className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2 py-4 sm:gap-3">
                 <span className="font-black text-zinc-400">{1 + standings.filter((other) => other.points > entry.points).length}°</span>
-                <div><p className="font-bold">{entry.team.name}</p><p className="text-sm text-zinc-500">{ownerName(entry.team.user_id)}</p></div>
+                <div className="min-w-0 break-words"><p className="font-bold">{entry.team.name}</p><p className="text-sm text-zinc-500">{ownerName(entry.team.user_id)}</p></div>
                 <strong>{entry.points} pt</strong>
               </div>)}</div>
             {!standings.length && <p className="text-zinc-500">Le squadre non sono ancora state assegnate.</p>}
@@ -294,24 +282,15 @@ export default async function HomePage({ searchParams }: {
             </Card>
           </>}
         </section>
-      </div>
-    </div>
-  </main>;
+  </PortalShell>;
 }
 
-function Header({ name, manager }: { name: string; manager: boolean }) {
-  return <header className="flex items-center justify-between border-b border-zinc-200 pb-5">
-    <Link href="/home" className="text-xl font-black">GRID<span className="text-red-600">F1</span></Link>
-    <div className="flex items-center gap-5 text-sm"><span>Ciao, {name}</span>
-      {manager && <Link className="font-bold text-red-600" href="/manager">Gestisci risultati</Link>}</div>
-  </header>;
-}
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
-  return <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm"><h2 className="mb-4 text-xl font-black">{title}</h2>{children}</div>;
+  return <div className="min-w-0 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-6"><h2 className="mb-4 text-lg font-black sm:text-xl">{title}</h2>{children}</div>;
 }
-function Metric({ label, value }: { label: string; value: string }) {
-  return <div className="rounded-2xl border border-zinc-200 bg-white p-5"><p className="text-sm text-zinc-500">{label}</p>
-    <p className="mt-3 truncate text-2xl font-black">{value}</p></div>;
+function Metric({ label, value, className = '' }: { label: string; value: string; className?: string }) {
+  return <div className={`min-w-0 rounded-2xl border border-zinc-200 bg-white p-4 sm:p-5 ${className}`}><p className="text-xs text-zinc-500 sm:text-sm">{label}</p>
+    <p className="mt-2 break-words text-xl font-black sm:text-2xl">{value}</p></div>;
 }
 function LeagueForms() {
   return <div className="mt-5 grid gap-5 sm:grid-cols-2">
