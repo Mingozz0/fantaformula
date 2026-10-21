@@ -11,6 +11,12 @@ import { buildLeagueStats } from '@/lib/league-stats';
 import { assertQuery } from '@/lib/query-errors';
 import { AdvancedDashboard } from '@/app/components/advanced-dashboard';
 import { buildAdvancedStats } from '@/lib/advanced-stats';
+import { WeekendCenter } from '@/app/components/weekend-center';
+import { LineupSummary } from '@/app/components/lineup-summary';
+import { LineupDeadline } from '@/app/components/lineup-deadline';
+import { ChangeHistory } from '@/app/components/change-history';
+import { auditChanges, type AuditEntry, type Snapshot } from '@/lib/audit';
+import { weekendRace, type WeekendRace, type RaceSession } from '@/lib/weekend';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
@@ -28,9 +34,8 @@ type TeamDraft = { id: string; league_id: string; player_name: string; name: str
   driver_one_id: number; driver_two_id: number; driver_three_id: number };
 type Driver = { id: number; first_name: string; last_name: string };
 type SeasonDriver = { driver_id: number; drivers: Driver };
-type Race = { id: number; round: number; name: string; race_date: string | null;
-  lineup_deadline_at: string | null; has_sprint: boolean; gp_published: boolean; sprint_published: boolean };
-type Lineup = FantasyLineup & { id: string; fantasy_team_id: string; race_id: number; retroactive: boolean };
+type Race = WeekendRace;
+type Lineup = FantasyLineup & { id: string; fantasy_team_id: string; race_id: number; retroactive: boolean; submitted_at: string };
 type Pit = { race_id: number; constructor_id: number; fastest_pit_stop: boolean };
 type RaceResult = DriverResult & { race_id: number };
 
@@ -69,7 +74,7 @@ export default async function HomePage({ searchParams }: {
   const memberships = (membershipsData ?? []) as unknown as Membership[];
   const leagues = memberships.map((membership) => membership.leagues);
   const selected = leagues.find((league) => league.id === params.league);
-  const tab = ['overview', 'team', 'lineup', 'standings', 'results', 'manage', 'analytics'].includes(params.tab ?? '')
+  const tab = ['overview', 'team', 'lineup', 'standings', 'results', 'manage', 'analytics', 'history'].includes(params.tab ?? '')
     ? params.tab! : 'overview';
   if (!selected) {
     const profileResult = await supabase.from('profiles').select('display_name').eq('id', userId).maybeSingle();
@@ -85,11 +90,12 @@ export default async function HomePage({ searchParams }: {
     membership.league_id === selected.id && membership.role === 'admin');
   if (tab === 'analytics' && !managerData) redirect(url(selected.id, 'overview'));
   if (tab === 'manage' && !isAdmin) redirect(url(selected.id, 'overview'));
+  if (tab === 'history' && !isAdmin && !managerData) redirect(url(selected.id, 'overview'));
   const needsStats = ['overview', 'team', 'standings', 'analytics'].includes(tab);
   const needsScores = needsStats || tab === 'results';
-  const needsDrivers = ['team', 'lineup', 'results', 'manage', 'analytics'].includes(tab);
-  const needsConstructors = ['team', 'results', 'manage'].includes(tab);
-  const needsRaces = needsScores || tab === 'lineup';
+  const needsDrivers = ['overview', 'team', 'lineup', 'results', 'manage', 'analytics', 'history'].includes(tab);
+  const needsConstructors = ['overview', 'team', 'lineup', 'results', 'manage', 'history'].includes(tab);
+  const needsRaces = needsScores || tab === 'lineup' || tab === 'history';
   const emptyRows = { data: [] };
   const leagueData = await Promise.all([
     supabase.from('league_members').select('user_id,role').eq('league_id', selected.id),
@@ -98,7 +104,7 @@ export default async function HomePage({ searchParams }: {
       .eq('season_id', selected.season_id) : emptyRows,
     needsConstructors ? supabase.from('season_constructors').select('constructor_id,display_name')
       .eq('season_id', selected.season_id) : emptyRows,
-    needsRaces ? supabase.from('races').select('id,round,name,race_date,lineup_deadline_at,has_sprint,gp_published,sprint_published')
+    needsRaces ? supabase.from('races').select('id,round,name,circuit,race_date,race_starts_at,sprint_starts_at,sprint_qualifying_starts_at,lineup_deadline_at,has_sprint,gp_published,sprint_published')
       .eq('season_id', selected.season_id).order('round') : emptyRows,
     needsScores ? supabase.from('season_scoring_rules').select('*').eq('season_id', selected.season_id).maybeSingle() : { data: null },
     needsScores || tab === 'lineup' ? supabase.from('lineups').select('*').eq('league_id', selected.id) : emptyRows,
@@ -135,8 +141,8 @@ export default async function HomePage({ searchParams }: {
     ?? `Scuderia ${id}`;
   const ownerName = (id: string) => profiles.find((item) => item.id === id)?.display_name ?? 'Partecipante';
   const now = await currentTime();
-  const nextRace = races.find((race) => race.lineup_deadline_at && Date.parse(race.lineup_deadline_at) > now);
-  const raceForLineup = races.find((race) => race.id === Number(params.race)) ?? nextRace ?? races.at(-1);
+  const weekend = races.find((race) => race.id === Number(params.race)) ?? weekendRace(races,now);
+  const raceForLineup = races.find((race) => race.id === Number(params.race)) ?? weekend;
   const raceForResults = races.find((race) => race.id === Number(params.race))
     ?? races.filter((race) => race.gp_published || race.sprint_published).at(-1) ?? races[0];
   const standings = needsStats ? buildLeagueStats({ teams, races, lineups, gpResults, sprintResults, pitResults, rules }) : [];
@@ -144,6 +150,22 @@ export default async function HomePage({ searchParams }: {
   const provisional = tab === 'standings' && races.some((race) => (race.gp_published || race.sprint_published)
     && ((race.has_sprint && !race.sprint_published) || !race.gp_published
       || teams.some((team) => !lineups.some((lineup) => lineup.fantasy_team_id === team.id && lineup.race_id === race.id))));
+  const extras=await Promise.all([
+    tab==='overview'&&weekend?supabase.from('race_sessions').select('*').eq('race_id',weekend.id):emptyRows,
+    tab==='history'&&isAdmin&&weekend?supabase.from('lineup_audit').select('id,actor_id,changed_at,previous_value,current_value').eq('league_id',selected.id).eq('current_value->>race_id',String(weekend.id)).order('changed_at',{ascending:false}).order('id',{ascending:false}).limit(200):emptyRows,
+    tab==='history'&&managerData&&weekend?supabase.from('race_change_audit').select('*').eq('race_id',weekend.id).order('changed_at',{ascending:false}).order('id',{ascending:false}).limit(200):emptyRows,
+  ]);
+  extras.forEach((result)=>assertQuery(result,'Impossibile caricare weekend e storico'));
+  const [{data:sessionsData},{data:lineupAuditData},{data:raceAuditData}]=extras;
+  const actorIds=[...new Set([...(lineupAuditData??[]),...(raceAuditData??[])].map((row)=>row.actor_id).filter((id):id is string=>Boolean(id)))];
+  const actorResult=actorIds.length?await supabase.from('profiles').select('id,display_name').in('id',actorIds):emptyRows;
+  assertQuery(actorResult,'Impossibile caricare gli autori delle modifiche');
+  const actorName=(id:string|null)=>actorResult.data?.find((profile)=>profile.id===id)?.display_name??(id?'Account non disponibile':'Database');
+  const history:AuditEntry[]=[...(lineupAuditData??[]).map((row)=>({id:`lineup-${row.id}`,kind:'lineup',title:`${teams.find((team)=>team.id===(row.current_value as Snapshot)?.fantasy_team_id)?.name??'Squadra'} · ${weekend?.name}`,
+    actor:actorName(row.actor_id),changedAt:row.changed_at,changes:auditChanges('lineup',row.previous_value,row.current_value,driverName,constructorName)})),
+    ...(raceAuditData??[]).map((row)=>({id:`race-${row.id}`,kind:row.kind,title:`${weekend?.name} · ${row.event==='calendar'?'Calendario':row.event==='gp'?'Gran Premio':'Sprint'}`,
+      actor:row.kind==='baseline'?'Situazione iniziale':actorName(row.actor_id),changedAt:row.changed_at,version:row.version,
+      changes:auditChanges(row.kind,row.previous_value,row.current_value,driverName,constructorName)}))].sort((a,b)=>Date.parse(b.changedAt)-Date.parse(a.changedAt));
 
   return <PortalShell defaultOpen={sidebarOpen} name={ownerName(userId)} leagues={leagues} selectedLeagueId={selected.id}
     activeTab={tab} pageTitle={tab === 'team' ? selectedTeam?.team.name : undefined} isAdmin={isAdmin} isManager={Boolean(managerData)}>
@@ -154,16 +176,13 @@ export default async function HomePage({ searchParams }: {
             <p className="mt-2 text-sm text-zinc-500 sm:text-base">{members.length} di 7 partecipanti · {isAdmin ? 'Amministratore' : 'Partecipante'}</p></div>
 
           {tab === 'overview' && <>
+            {weekend&&<WeekendCenter key={weekend.id} race={weekend} sessions={(sessionsData??[]) as RaceSession[]} initialNow={now} leagueId={selected.id} active={selected.status==='active'} hasTeam={Boolean(myTeam)}>
+              {myTeam&&<LineupSummary teamName={myTeam.name} lineup={lineups.find((lineup)=>lineup.fantasy_team_id===myTeam.id&&lineup.race_id===weekend.id)} driverName={driverName} constructorName={constructorName(myTeam.constructor_id)} closed={Boolean(weekend.lineup_deadline_at&&now>=Date.parse(weekend.lineup_deadline_at))} />}
+            </WeekendCenter>}
             <LeagueDashboard entries={standings} leagueId={selected.id} />
-            <Card title="Prossima formazione">
-              {nextRace ? <><p>{nextRace.name} · {dateLabel(nextRace.race_date)}{nextRace.has_sprint ? ' · Sprint' : ''}</p>
-                <p className="mt-2 text-sm text-zinc-500">Chiusura: {deadlineLabel(nextRace.lineup_deadline_at)}</p>
-                {selected.status === 'active' ?
-                  <Link className="mt-4 inline-block font-bold text-red-600" href={url(selected.id,'lineup',nextRace.id)}>Imposta formazione →</Link>
-                  : <p className="mt-4 text-sm text-amber-800">La lega deve essere attivata prima di schierare la formazione.</p>}</>
-                : <p>Non ci sono formazioni future da inviare.</p>}
-            </Card>
           </>}
+
+          {tab==='history'&&<>{weekend&&<RacePicker races={races} value={weekend.id} href={url(selected.id,'history')} />}<ChangeHistory key={weekend?.id} entries={history} /></>}
 
           {tab === 'team' && (selectedTeam ? <TeamDashboard entry={selectedTeam} leagueId={selected.id}
             owner={ownerName(selectedTeam.team.user_id)} leaderPoints={standings[0]?.points ?? 0}
@@ -176,10 +195,12 @@ export default async function HomePage({ searchParams }: {
             {raceForLineup && <Card title={`${raceForLineup.name} · ${dateLabel(raceForLineup.race_date)}`}>
               <p className="mb-5 text-sm text-zinc-500">Scadenza {deadlineLabel(raceForLineup.lineup_deadline_at)}. Scegli due titolari; il terzo è la riserva.</p>
               {selected.status !== 'active' && <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Attendi l’attivazione della lega.</p>}
-              {selected.status === 'active' && myTeam && (!raceForLineup.lineup_deadline_at || now < Date.parse(raceForLineup.lineup_deadline_at)) &&
-                <LineupForm leagueId={selected.id} race={raceForLineup} team={myTeam}
+              {myTeam&&<div className="mb-5"><LineupSummary teamName={myTeam.name} lineup={lineups.find((lineup)=>lineup.fantasy_team_id===myTeam.id&&lineup.race_id===raceForLineup.id)} driverName={driverName} constructorName={constructorName(myTeam.constructor_id)} closed={Boolean(raceForLineup.lineup_deadline_at&&now>=Date.parse(raceForLineup.lineup_deadline_at))} /></div>}
+              {!raceForLineup.lineup_deadline_at&&<p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">Scadenza da confermare: inserimento non ancora disponibile.</p>}
+              {selected.status === 'active' && myTeam && raceForLineup.lineup_deadline_at && now < Date.parse(raceForLineup.lineup_deadline_at) &&
+                <LineupDeadline key={`${raceForLineup.id}-${raceForLineup.lineup_deadline_at}`} deadline={raceForLineup.lineup_deadline_at} initialNow={now}><LineupForm leagueId={selected.id} race={raceForLineup} team={myTeam}
                   lineup={lineups.find((item) => item.fantasy_team_id === myTeam.id && item.race_id === raceForLineup.id)}
-                  driverName={driverName} />}
+                  driverName={driverName} constructorName={constructorName(myTeam.constructor_id)} /></LineupDeadline>}
               {raceForLineup.lineup_deadline_at && now >= Date.parse(raceForLineup.lineup_deadline_at) &&
                 <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">La scadenza è passata. Solo l’amministratore può recuperare questa formazione.</p>}
               {selected.status === 'active' && isAdmin && raceForLineup.lineup_deadline_at && now >= Date.parse(raceForLineup.lineup_deadline_at) &&
@@ -187,7 +208,7 @@ export default async function HomePage({ searchParams }: {
                   <h3 className="mb-3 font-bold">{team.name} · {ownerName(team.user_id)}</h3>
                   <LineupForm leagueId={selected.id} race={raceForLineup} team={team}
                     lineup={lineups.find((item) => item.fantasy_team_id === team.id && item.race_id === raceForLineup.id)}
-                    driverName={driverName} />
+                    driverName={driverName} constructorName={constructorName(team.constructor_id)} />
                 </div>)}</div>}
               {!myTeam && !isAdmin && <p>Attendi l’assegnazione della tua squadra.</p>}
             </Card>}
@@ -325,17 +346,18 @@ function TeamDraftForm({ leagueId, draft, drivers, constructorRows, driverName }
     </SubmitButton>
   </form>;
 }
-function LineupForm({ leagueId, race, team, lineup, driverName }: {
-  leagueId: string; race: Race; team: Team; lineup?: Lineup; driverName: (id: number) => string;
+function LineupForm({ leagueId, race, team, lineup, driverName, constructorName }: {
+  leagueId: string; race: Race; team: Team; lineup?: Lineup; driverName: (id: number) => string; constructorName:string;
 }) {
   const roster = [team.driver_one_id, team.driver_two_id, team.driver_three_id];
   return <form key={`${race.id}-${team.id}`} action={saveLineup} className="grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+    <p className="text-sm font-semibold text-zinc-700 md:col-span-3">Scuderia schierata: {constructorName}</p>
     <input type="hidden" name="league_id" value={leagueId} />
     <input type="hidden" name="fantasy_team_id" value={team.id} />
     <input type="hidden" name="race_id" value={race.id} />
     <LineupSelection key={`${race.id}-${team.id}-${lineup?.driver_one_id}-${lineup?.driver_two_id}`}
       initialOne={lineup?.driver_one_id} initialTwo={lineup?.driver_two_id}
       options={roster.map((id) => ({ value: id, label: driverName(id) }))} />
-    {lineup && <p className="text-xs text-zinc-500 md:col-span-3">Ultimo salvataggio: {lineup.retroactive ? 'recupero dell’amministratore' : 'partecipante'}.</p>}
+    {lineup && <p className="text-xs text-zinc-500 md:col-span-3">Ultimo salvataggio: {deadlineLabel(lineup.submitted_at)} · {lineup.retroactive ? 'recupero dell’amministratore' : 'partecipante'}.</p>}
   </form>;
 }

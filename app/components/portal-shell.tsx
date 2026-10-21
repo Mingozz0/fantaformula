@@ -1,7 +1,7 @@
 'use client';
 
 import { type ReactNode } from 'react';
-import { BarChart3, ClipboardList, Flag, Gauge, House, LogOut, Settings2, Trophy, Users, X } from 'lucide-react';
+import { BarChart3, ClipboardList, Flag, Gauge, History, House, LogOut, Settings2, Trophy, Users, X } from 'lucide-react';
 import { Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
   SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton,
   SidebarMenuItem, SidebarProvider, SidebarSeparator, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
@@ -59,6 +59,7 @@ function PortalSidebar({ name, leagues, selectedLeagueId, activeTab, isAdmin, is
       {(isAdmin || isManager) && <SidebarGroup className="mt-5 p-0">
         <SidebarGroupLabel className="px-3 text-[11px] uppercase tracking-widest text-zinc-500">Amministrazione</SidebarGroupLabel>
         <SidebarGroupContent><SidebarMenu className="gap-1">
+          {selected&&<SidebarMenuItem><SidebarMenuButton asChild isActive={activeTab==='history'} className="h-11! rounded-xl px-3 font-medium data-[active=true]:bg-red-600 data-[active=true]:text-white"><NavigationLink href={href('history')} onClick={closeMenu} aria-current={activeTab==='history'?'page':undefined}><History className="size-4" /><span>Storico modifiche</span></NavigationLink></SidebarMenuButton></SidebarMenuItem>}
           {isAdmin && selected && <SidebarMenuItem><SidebarMenuButton asChild isActive={activeTab === 'manage'} className="h-11! rounded-xl px-3 font-medium data-[active=true]:bg-red-600 data-[active=true]:text-white">
             <NavigationLink href={href('manage')} onClick={closeMenu} aria-current={activeTab === 'manage' ? 'page' : undefined}><Settings2 className="size-4" /><span>Gestione squadre</span></NavigationLink>
           </SidebarMenuButton></SidebarMenuItem>}
@@ -80,7 +81,7 @@ function PortalSidebar({ name, leagues, selectedLeagueId, activeTab, isAdmin, is
 
 export function PortalShell({ children, defaultOpen = true, pageTitle, ...props }: ShellProps) {
   const title = pageTitle ?? sections.find((section) => section.id === props.activeTab)?.label
-    ?? (props.activeTab === 'manager' ? 'Gestisci risultati' : props.activeTab === 'analytics' ? 'Statistiche avanzate' : props.activeTab === 'home' ? 'Le mie leghe' : 'Gestione squadre');
+    ?? (props.activeTab === 'history' ? 'Storico modifiche' : props.activeTab === 'manager' ? 'Gestisci risultati' : props.activeTab === 'analytics' ? 'Statistiche avanzate' : props.activeTab === 'home' ? 'Le mie leghe' : 'Gestione squadre');
   const initials = props.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('');
   return <SidebarProvider defaultOpen={defaultOpen} className="min-h-svh bg-[#f6f6f4] text-zinc-950">
     <a href="#contenuto" className="sr-only z-[100] rounded-lg bg-white p-3 text-sm font-bold focus:not-sr-only focus:fixed focus:left-4 focus:top-4">Vai al contenuto</a>

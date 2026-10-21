@@ -26,6 +26,12 @@ Nel progetto Supabase, in **Authentication → URL Configuration**, configura `h
 
 ## Bozze e statistiche
 
+- La panoramica apre il centro del weekend: programma delle sessioni, countdown, chiusura delle formazioni e stato dei risultati. Gli orari sono mostrati in `Europe/Rome`, con cambio ora legale gestito automaticamente. Dopo la scadenza il centro resta sul GP corrente fino al giorno successivo alla gara in Italia.
+- La formazione consegnata resta consultabile con titolari, riserva, scuderia e data dell’ultimo salvataggio. La scuderia è schierata automaticamente e compare anche nel modulo di inserimento.
+- “Storico modifiche” mostra agli admin le formazioni della propria lega. Il gestore vede inoltre bozze, pubblicazioni e aggiornamenti degli orari, con autore, data e confronto prima/dopo. Le bozze dei risultati non sono visibili agli altri ruoli. I risultati già presenti sono registrati come situazione iniziale, senza ricostruire modifiche passate.
+- `race_sessions` conserva gli orari importati. Dal gestore, “Aggiorna orari” verifica stagione, round, circuito, data e formato Sprint prima di salvare. Le scadenze standard e quelle passate restano invariate; una scadenza Sprint ancora futura segue l’orario aggiornato delle qualifiche Sprint. I dati assenti non vengono inventati e gli errori della fonte conservano il programma precedente.
+- Applicare `supabase/migrations/20261021163357_weekend_schedule_and_history.sql` prima di distribuire queste schermate. `race_change_audit` è scrivibile soltanto dai trigger interni; nessun client può inserire, modificare o cancellare lo storico.
+
 - `result_drafts` conserva una bozza per gara ed evento, leggibile e modificabile soltanto dai gestori (`game_managers`). È possibile salvare dati incompleti; i controlli completi scattano alla pubblicazione.
 - Ogni salvataggio usa una versione per impedire sovrascritture da altre finestre. Una copia temporanea nella sessione del browser protegge le modifiche durante un’interruzione della connessione.
 - I grafici della lega permettono di scegliere le squadre, confrontarne due, filtrare GP/Sprint, punti per tappa, cumulativi e posizioni.
@@ -90,6 +96,7 @@ npm run lint
 npm run build
 npm run test:scoring
 npm run test:imports
+npm run test:weekend
 ```
 
 I test del database sono stati eseguiti in transazioni poi annullate: creazione profilo, ingresso in lega, blocco delle modifiche non autorizzate, limite minimo per l'attivazione, quattro squadre, recupero formazione e scrittura dei risultati da parte del gestore. Per lo stato puntuale del progetto vedi [docs/MODIFICHE.md](docs/MODIFICHE.md).

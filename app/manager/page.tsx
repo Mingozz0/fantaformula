@@ -7,6 +7,10 @@ import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
 import { assertQuery } from '@/lib/query-errors';
 import type { ResultDraft } from '@/lib/result-draft';
+import { ScheduleSync } from '@/app/components/schedule-sync';
+import { ChangeHistory } from '@/app/components/change-history';
+import { auditChanges, type AuditEntry } from '@/lib/audit';
+import { sessionLabels,sessionTime,type RaceSession } from '@/lib/weekend';
 
 type Race = { id: number; round: number; name: string; has_sprint: boolean;
   gp_published: boolean; sprint_published: boolean; race_date: string | null };
@@ -57,20 +61,31 @@ export default async function ManagerPage({ searchParams }: {
       .select('*').eq('race_id', selected.id) : Promise.resolve({ data: [] }),
     selected ? supabase.from('race_constructor_results').select('constructor_id,fastest_pit_stop').eq('race_id', selected.id) : Promise.resolve({ data: [] }),
     selected ? supabase.from('result_drafts').select('payload,version,updated_at,published_version').eq('race_id', selected.id).eq('event', event).maybeSingle() : Promise.resolve({ data: null }),
+    selected ? supabase.from('race_sessions').select('*').eq('race_id',selected.id).order('starts_at') : Promise.resolve({data:[]}),
+    selected ? supabase.from('race_change_audit').select('*').eq('race_id',selected.id).in('event',[event,'calendar']).order('changed_at',{ascending:false}).order('id',{ascending:false}).limit(200) : Promise.resolve({data:[]}),
   ]);
   raceData.forEach((result) => assertQuery(result, 'Impossibile caricare risultati e bozze'));
-  const [{ data: driversData }, { data: resultsData }, { data: pitData }, { data: draftData }] = raceData;
+  const [{ data: driversData }, { data: resultsData }, { data: pitData }, { data: draftData },{data:sessionsData},{data:auditData}] = raceData;
   const draft = draftData as ResultDraft | undefined;
   const drivers = (driversData ?? []) as Driver[];
   const results = (resultsData ?? []) as Result[];
   const pitId = (pitData ?? []).find((item) => item.fastest_pit_stop)?.constructor_id;
   const driverName = (id: number) => { const d = drivers.find((item) => item.id === id); return d ? `${d.first_name} ${d.last_name}` : `Pilota ${id}`; };
+  const constructorName=(id:number)=>constructors.find((row)=>row.constructor_id===id)?.display_name??`Scuderia ${id}`;
+  const actorIds=[...new Set((auditData??[]).map((row)=>row.actor_id).filter((id):id is string=>Boolean(id)))];
+  const actors=actorIds.length?await supabase.from('profiles').select('id,display_name').in('id',actorIds):{data:[]};
+  assertQuery(actors,'Impossibile caricare gli autori delle modifiche');
+  const history:AuditEntry[]=(auditData??[]).map((row)=>({id:String(row.id),kind:row.kind,title:row.event==='calendar'?'Programma del weekend':`${selected?.name} · ${event==='gp'?'GP':'Sprint'}`,actor:row.kind==='baseline'?'Situazione iniziale':actors.data?.find((actor)=>actor.id===row.actor_id)?.display_name??'Database',changedAt:row.changed_at,version:row.version,changes:auditChanges(row.kind,row.previous_value,row.current_value,driverName,constructorName)}));
   return <PortalShell defaultOpen={sidebarOpen} name={profile?.display_name ?? 'Il tuo account'} leagues={leagues} selectedLeagueId={league?.id} activeTab="manager" isAdmin={isAdmin} isManager>
     <div><p className="text-xs font-bold uppercase tracking-widest text-red-600">Gestore del gioco</p>
       <h1 className="mt-2 text-3xl font-black sm:text-4xl">Risultati 2026</h1>
     </div>
     {params.message && <p role="status" className="mt-6 rounded-xl bg-amber-100 p-4 text-sm text-amber-950">{params.message}</p>}
     {selected && <><RacePicker races={races} value={selected.id} href={managerUrl(undefined, event)} />
+      <section className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-black">Programma del weekend</h2><ScheduleSync raceId={selected.id} /></div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{((sessionsData??[]) as RaceSession[]).map((session)=><div key={session.session_key} className="rounded-xl bg-zinc-50 p-3"><p className="text-xs font-bold">{sessionLabels[session.session_key]}</p><p className="mt-1 text-xs text-zinc-500">{sessionTime(session.starts_at)}</p></div>)}</div>
+        {!sessionsData?.length&&<p className="text-sm text-zinc-500">Orari ancora da importare.</p>}
+      </section>
       <div className="flex gap-2"><Link href={managerUrl(selected.id, 'gp')}
       className={`min-h-11 rounded-xl px-4 py-3 text-sm font-bold ${event === 'gp' ? 'bg-zinc-950 text-white' : 'bg-white'}`}>Gran Premio</Link>
       {selected.has_sprint && <Link href={managerUrl(selected.id, 'sprint')}
@@ -83,6 +98,6 @@ export default async function ManagerPage({ searchParams }: {
           published={event === 'gp' ? selected.gp_published : selected.sprint_published}
           drivers={roster.map((row) => ({ id: row.driver_id, name: driverName(row.driver_id), constructorId: row.constructor_id }))}
           constructors={constructors} results={results} pitId={event === 'gp' ? pitId : undefined} />
-      </div></>}
+      </div><ChangeHistory key={`${selected.id}-${event}`} entries={history} /></>}
   </PortalShell>;
 }
