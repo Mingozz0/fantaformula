@@ -7,6 +7,8 @@ import { validatePositions } from '@/lib/result-validation';
 import { isDraftPayload, type DraftPayload, type DraftReply, type ResultDraft } from '@/lib/result-draft';
 import { DriverResultFields, type EditableDriverResult } from './driver-result-fields';
 import { FormSelect } from './form-select';
+import { ResultImportPanel } from './result-import-panel';
+import { mergeResultImport, type ResultImport } from '@/lib/result-import';
 
 type EditorDriver = { id: number; name: string; constructorId: number };
 export type EditorResult = EditableDriverResult & { driver_id: number; fastest_lap: boolean; driver_of_the_day?: boolean };
@@ -22,7 +24,7 @@ export function ResultsEditor({ raceId, event, userId, drivers, constructors, re
       finish_position: saved?.finish_position ?? null, result_status: saved?.result_status ?? 'finished', formation_lap: saved?.formation_lap ?? true };
   }), fastest_driver_id: draft ? draft.payload.fastest_driver_id : results.find((row) => row.fastest_lap)?.driver_id ?? null,
     dotd_driver_id: draft ? draft.payload.dotd_driver_id : results.find((row) => row.driver_of_the_day)?.driver_id ?? null,
-    pit_constructor_id: draft ? draft.payload.pit_constructor_id : pitId ?? null }));
+    pit_constructor_id: draft ? draft.payload.pit_constructor_id : pitId ?? null, ...(draft?.payload.imported ? { imported: draft.payload.imported } : {}) }));
   const storageKey = `gridf1-draft:${userId}:${raceId}:${event}`;
   const version = useRef(draft?.version ?? 0);
   const [savedVersion, setSavedVersion] = useState(draft?.version ?? 0);
@@ -107,7 +109,19 @@ export function ResultsEditor({ raceId, event, userId, drivers, constructors, re
   }
   const options = drivers.map((driver) => ({ value: driver.id, label: driver.name }));
   const alreadyPublished = isPublished && !dirty && (savedVersion === 0 || publishedVersion === savedVersion);
+  const missingImportFields = [!payload.fastest_driver_id && 'giro veloce',
+    event === 'gp' && !payload.dotd_driver_id && 'pilota del giorno', event === 'gp' && !payload.pit_constructor_id && 'migliore sosta ai box',
+    ...drivers.filter((driver) => payload.drivers.some((row) => row.driver_id === driver.id && row.grid_position === null && row.result_status !== 'dns')).map((driver) => `griglia di ${driver.name}`),
+  ].filter(Boolean);
+  function applyImport(imported: ResultImport) {
+    const next = mergeResultImport(current.current, imported);
+    update(next); setPublicationAttempt(false);
+    void save(next);
+  }
   return <form onSubmit={(event) => { event.preventDefault(); void save(payload); }} noValidate autoComplete="off" className="mt-6 space-y-6">
+    <ResultImportPanel raceId={raceId} event={event} drivers={drivers} disabled={saving || publishing} onApply={applyImport} />
+    {payload.imported && <p className="text-xs text-zinc-500">Importato da <a href={payload.imported.url} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-2">Jolpica-F1</a> · {new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }).format(new Date(payload.imported.imported_at))}
+      {missingImportFields.length > 0 && <span className="mt-1 block font-semibold text-amber-700">Da verificare: {missingImportFields.join(', ')}.</span>}</p>}
     <fieldset disabled={publishing} className="space-y-6">
     <div className="grid gap-3 md:grid-cols-3">
       <FormSelect label="Giro veloce" name="fastest_driver_id" value={String(payload.fastest_driver_id ?? '')} onValueChange={(value) => update({ ...payload, fastest_driver_id: Number(value) })} options={options} />

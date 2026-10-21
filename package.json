@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test:scoring": "node scripts/test-scoring.mjs",
-    "test:portal": "node scripts/test-portal.mjs"
+    "test:portal": "node scripts/test-portal.mjs",
+    "test:imports": "node scripts/test-result-import.mjs"
   },
   "dependencies": {
     "@radix-ui/react-select": "2.4.1",

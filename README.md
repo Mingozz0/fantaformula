@@ -46,7 +46,7 @@ Nel progetto Supabase, in **Authentication → URL Configuration**, configura `h
 | Ritiro o squalifica | Solo −10, senza altri bonus | Solo −5, senza altri bonus |
 | Scuderia | Punti d'arrivo del migliore dei suoi piloti reali, più +5 per il miglior pit stop | Punti d'arrivo del migliore dei suoi piloti reali |
 
-La riserva subentra **solo se un titolare non effettua il giro di formazione**. Sprint e GP sono valutati separatamente. Se entrambi i titolari mancano, la riserva sostituisce il primo indicato e il secondo vale zero. Il capitano non assegna punti nel 2026. A pari punti le squadre condividono la stessa posizione in classifica.
+La riserva subentra **se un titolare è DNS (non partito) oppure non effettua il giro di formazione**. DNS attiva sempre la riserva, anche se il pilota ha effettuato il giro di formazione. Un ritiro durante la gara non attiva la riserva. Sprint e GP sono valutati separatamente. Se entrambi i titolari mancano, la riserva sostituisce il primo indicato e il secondo vale zero. Il capitano non assegna punti nel 2026. A pari punti le squadre condividono la stessa posizione in classifica.
 
 ## Gestore dei risultati
 
@@ -57,7 +57,15 @@ insert into public.game_managers (user_id)
 select id from auth.users where email = 'LA_TUA_EMAIL';
 ```
 
-Un admin di lega non può modificare i risultati sportivi comuni a tutte le leghe. Nell'area gestore, scegli il GP e compila per **tutti** i piloti griglia effettiva, arrivo o stato, scuderia reale e partecipazione al giro di formazione. Seleziona anche giro veloce, Driver of the Day e miglior pit stop per il GP; per la Sprint servono risultati e giro veloce. Salva e poi pubblica. I risultati delle gare passate del 2026 **non sono stati precaricati**: vanno inseriti manualmente, in linea con la scelta di prodotto.
+Un admin di lega non può modificare i risultati sportivi comuni a tutte le leghe. Nell'area gestore, scegli il GP e compila per **tutti** i piloti griglia effettiva, arrivo o stato, scuderia reale e partecipazione al giro di formazione. Seleziona anche giro veloce, Driver of the Day e miglior pit stop per il GP; per la Sprint servono risultati e giro veloce. Salva e poi pubblica.
+
+### Importazione risultati
+
+- “Importa risultati” recupera un’anteprima da [Jolpica-F1](https://github.com/jolpica/jolpica-f1) per la gara e l’evento selezionati. Il server verifica il ruolo di gestore prima di contattare il servizio.
+- “Applica alla bozza” sostituisce i dati dei piloti associati e il giro veloce disponibile, conserva i bonus manuali e i dati mancanti dalla fonte e salva la bozza. Fonte e ora dell’importazione restano nella bozza; nulla viene pubblicato automaticamente.
+- Il matching usa le chiavi esterne e, come alternativa, nome/cognome o cognome e codice pilota; le associazioni ambigue sono segnalate. Le posizioni di classificazione dei ritirati non diventano arrivi validi.
+- Pilota del giorno e migliore sosta ai box restano manuali. Griglie assenti o partenze dai box richiedono verifica; i valori zero della fonte non vengono convertiti in posizioni inventate.
+- Le richieste usano un User-Agent GRIDF1, cache di 60 secondi e timeout di 12 secondi. Errori del servizio e risultati non disponibili lasciano la bozza intatta. Non servono chiavi API o nuove variabili d’ambiente.
 
 ## Database e fonti
 
@@ -81,6 +89,7 @@ Le tabelle pubbliche hanno Row Level Security. Le chiavi segrete non sono usate 
 npm run lint
 npm run build
 npm run test:scoring
+npm run test:imports
 ```
 
 I test del database sono stati eseguiti in transazioni poi annullate: creazione profilo, ingresso in lega, blocco delle modifiche non autorizzate, limite minimo per l'attivazione, quattro squadre, recupero formazione e scrittura dei risultati da parte del gestore. Per lo stato puntuale del progetto vedi [docs/MODIFICHE.md](docs/MODIFICHE.md).

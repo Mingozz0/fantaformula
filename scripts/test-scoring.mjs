@@ -48,6 +48,20 @@ assert.deepEqual(reserve.driverIds, [3, 2]);
 assert.equal(reserve.reserveUsed, true);
 assert.equal(reserve.total, 22);
 
+// DNS always activates the reserve, even if formation-lap participation is true.
+const dnsAfterFormation = scoreEvent(lineup, 1, [
+  result(1, 3, null, { result_status: 'dns', formation_lap: true }),
+  result(2, 5, 6), result(3, 10, 8),
+], rules, false);
+assert.deepEqual(dnsAfterFormation.driverIds, [3, 2]);
+assert.equal(dnsAfterFormation.total, 22);
+const retired = scoreEvent(lineup, 1, [result(1, 3, null, { result_status: 'dnf' }), result(2, 5, 6), result(3, 10, 8)], rules, false);
+assert.equal(retired.reserveUsed, false);
+assert.deepEqual(retired.driverIds, [1, 2]);
+const sprintDns = scoreEvent(lineup, 1, [result(1, 3, 1), result(2, 5, null, { result_status: 'dns' }), result(3, 10, 8)], rules, true);
+assert.deepEqual(sprintDns.driverIds, [1, 3]);
+assert.equal(sprintDns.reserveUsed, true);
+
 const bothAbsent = scoreEvent(lineup, 1, [
   result(1, null, null, { result_status: 'dns', formation_lap: false }),
   result(2, null, null, { result_status: 'dns', formation_lap: false }),
