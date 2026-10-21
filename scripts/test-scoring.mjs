@@ -8,7 +8,7 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 const loaded = { exports: {} };
 new Function('module', 'exports', compiled)(loaded, loaded.exports);
-const { scoreDriver, scoreEvent } = loaded.exports;
+const { scoreDriver, scoreEvent, explainDriverScore, explainConstructorScore } = loaded.exports;
 
 const rules = {
   gp_finish_points: [25,18,15,12,10,8,6,4,2,1],
@@ -56,4 +56,21 @@ const bothAbsent = scoreEvent(lineup, 1, [
 assert.deepEqual(bothAbsent.driverIds, [3, 2]);
 assert.deepEqual(bothAbsent.driverScores, [8, 0]);
 assert.equal(scoreEvent(null, 1, [], rules, false).total, 0);
-console.log('Scoring: GP, Sprint, bonus, malus, riserva e formazione assente OK');
+const explained = explainDriverScore(result(1, 3, 1, { fastest_lap: true, driver_of_the_day: true }), rules, false);
+assert.equal(explained.total, 42);
+assert.deepEqual(explained.components.map((component) => component.points), [25, 3, 4, 5, 5]);
+assert.equal(explained.components.reduce((sum, component) => sum + component.points, 0), explained.total);
+const lostPositions = explainDriverScore(result(2, 5, 6), rules, false);
+assert.deepEqual(lostPositions.components.map((component) => component.points), [8, 0, -2]);
+assert.match(lostPositions.components[2].label, /persa/);
+assert.equal(explainDriverScore(result(1, null, 2), rules, false).total, 18);
+assert.equal(explainDriverScore(result(1, 1, null, { result_status: 'dnf', formation_lap: false }), rules, false).total, 0);
+assert.equal(explainDriverScore(undefined, rules, false).total, 0);
+assert.equal(explainDriverScore(result(1, 1, null, { result_status: 'dns' }), rules, false).total, 0);
+assert.equal(explainDriverScore(result(1, 2, 1, { driver_of_the_day: true }), rules, true).total, 12);
+const constructor = explainConstructorScore(1, [result(1, 3, 1), result(2, 5, 6)], rules, false, 1);
+assert.equal(constructor.total, 30);
+assert.deepEqual(constructor.components.map((component) => component.points), [25, 5]);
+assert.equal(explainConstructorScore(2, [], rules, false).total, 0);
+assert.equal(explainConstructorScore(1, [result(1, 3, 1)], rules, true, 1).total, 8);
+console.log('Scoring: GP, Sprint, bonus, malus, riserva, formazione assente e dettaglio dei punti OK');

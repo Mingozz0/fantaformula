@@ -1,4 +1,5 @@
 import { NavigationLink as Link, SubmitButton } from '@/app/components/action-feedback';
+import { FormSelect } from '@/app/components/form-select';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { publishResults, saveResults } from './actions';
@@ -63,31 +64,30 @@ export default async function ManagerPage({ searchParams }: {
         <p className="mt-1 text-sm text-zinc-500">{results.length}/{roster.length} piloti registrati · {(event === 'gp' ? selected.gp_published : selected.sprint_published) ? 'pubblicato' : 'non pubblicato'}</p>
         <form action={saveResults} className="mt-6 space-y-6"><input type="hidden" name="race_id" value={selected.id} />
           <input type="hidden" name="event" value={event} />
-          <div className="grid gap-3 md:grid-cols-3"><label className="text-sm font-bold">Giro veloce
-            <select required name="fastest_driver_id" defaultValue={fastestId ?? ''} className="mt-1 w-full rounded-lg border p-2">
-              <option value="">Seleziona</option>{roster.map((row) => <option key={row.driver_id} value={row.driver_id}>{driverName(row.driver_id)}</option>)}</select></label>
-            {event === 'gp' && <><label className="text-sm font-bold">Driver of the Day
-              <select required name="dotd_driver_id" defaultValue={dotdId ?? ''} className="mt-1 w-full rounded-lg border p-2">
-                <option value="">Seleziona</option>{roster.map((row) => <option key={row.driver_id} value={row.driver_id}>{driverName(row.driver_id)}</option>)}</select></label>
-              <label className="text-sm font-bold">Miglior pit stop
-                <select required name="pit_constructor_id" defaultValue={pitId ?? ''} className="mt-1 w-full rounded-lg border p-2">
-                  <option value="">Seleziona</option>{constructors.map((row) => <option key={row.constructor_id} value={row.constructor_id}>{row.display_name}</option>)}</select></label></>}
+          <div className="grid gap-3 md:grid-cols-3">
+            <FormSelect label="Giro veloce" required name="fastest_driver_id" defaultValue={fastestId}
+              options={roster.map((row) => ({ value: row.driver_id, label: driverName(row.driver_id) }))} />
+            {event === 'gp' && <>
+              <FormSelect label="Pilota del giorno" required name="dotd_driver_id" defaultValue={dotdId}
+                options={roster.map((row) => ({ value: row.driver_id, label: driverName(row.driver_id) }))} />
+              <FormSelect label="Migliore sosta ai box" required name="pit_constructor_id" defaultValue={pitId}
+                options={constructors.map((row) => ({ value: row.constructor_id, label: row.display_name }))} />
+            </>}
           </div>
           <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-left text-sm"><thead><tr className="border-b text-xs uppercase text-zinc-500">
             <th className="p-2">Pilota</th><th className="p-2">Scuderia reale</th><th className="p-2">Griglia</th>
-            <th className="p-2">Arrivo</th><th className="p-2">Stato</th><th className="p-2">Giro formazione</th>
+            <th className="p-2">Arrivo</th><th className="p-2">Esito</th><th className="p-2">Giro di formazione</th>
           </tr></thead><tbody>{roster.map((row) => {
             const result = results.find((item) => item.driver_id === row.driver_id);
             return <tr key={row.driver_id} className="border-b border-zinc-100"><td className="p-2 font-semibold">{driverName(row.driver_id)}</td>
-              <td className="p-2"><select name={`constructor_${row.driver_id}`} defaultValue={result?.constructor_id ?? row.constructor_id}
-                className="w-full rounded border p-2">{constructors.map((item) => <option key={item.constructor_id} value={item.constructor_id}>{item.display_name}</option>)}</select></td>
+              <td className="p-2"><FormSelect hideLabel label={`Scuderia di ${driverName(row.driver_id)}`} name={`constructor_${row.driver_id}`}
+                defaultValue={result?.constructor_id ?? row.constructor_id} options={constructors.map((item) => ({ value: item.constructor_id, label: item.display_name }))} /></td>
               <td className="p-2"><input type="number" min={1} max={30} name={`grid_${row.driver_id}`} defaultValue={result?.grid_position ?? ''}
                 className="w-20 rounded border p-2" /></td>
               <td className="p-2"><input type="number" min={1} max={30} name={`finish_${row.driver_id}`} defaultValue={result?.finish_position ?? ''}
                 className="w-20 rounded border p-2" /></td>
-              <td className="p-2"><select name={`status_${row.driver_id}`} defaultValue={result?.result_status ?? 'finished'} className="rounded border p-2">
-                <option value="finished">Arrivato</option><option value="dnf">Ritirato</option><option value="dns">Non partito</option><option value="dsq">Squalificato</option>
-              </select></td>
+              <td className="p-2"><FormSelect hideLabel label={`Esito di ${driverName(row.driver_id)}`} name={`status_${row.driver_id}`} defaultValue={result?.result_status ?? 'finished'}
+                options={[{ value: 'finished', label: 'Arrivato' }, { value: 'dnf', label: 'Ritirato' }, { value: 'dns', label: 'Non partito' }, { value: 'dsq', label: 'Squalificato' }]} /></td>
               <td className="p-2 text-center"><input type="checkbox" name={`formation_${row.driver_id}`} defaultChecked={result?.formation_lap ?? true} /></td>
             </tr>;
           })}</tbody></table></div>

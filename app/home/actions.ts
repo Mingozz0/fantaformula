@@ -96,7 +96,7 @@ export async function saveTeamDraft(form: FormData) {
     supabase.from('league_members').select('role').eq('league_id', leagueId).eq('user_id', userId).single(),
     supabase.from('leagues').select('season_id').eq('id', leagueId).single(),
   ]);
-  if (admin?.role !== 'admin') redirect(home(leagueId, 'overview', 'Solo l’admin può preparare le squadre'));
+  if (admin?.role !== 'admin') redirect(home(leagueId, 'overview', 'Solo l’amministratore può preparare le squadre'));
   if (!league) redirect(home(leagueId, 'manage', 'Lega non trovata'));
   const payload = { player_name: playerName, name, constructor_id: constructorId,
     driver_one_id: ids[0], driver_two_id: ids[1], driver_three_id: ids[2] };
@@ -120,7 +120,7 @@ export async function assignTeamDraft(form: FormData) {
     supabase.from('league_members').select('role').eq('league_id', leagueId).eq('user_id', userId).single(),
     supabase.from('team_drafts').select('id').eq('id', draftId).eq('league_id', leagueId).single(),
   ]);
-  if (admin?.role !== 'admin') redirect(home(leagueId, 'overview', 'Solo l’admin può assegnare le squadre'));
+  if (admin?.role !== 'admin') redirect(home(leagueId, 'overview', 'Solo l’amministratore può assegnare le squadre'));
   if (!draft) redirect(home(leagueId, 'manage', 'Squadra in attesa non trovata'));
   const { error } = await supabase.rpc('assign_team_draft', { p_draft_id: draftId, p_user_id: recipientId });
   if (error) redirect(home(leagueId, 'manage', error.code === '23505'
@@ -135,7 +135,7 @@ export async function deleteTeamDraft(form: FormData) {
   const draftId = textField(form, 'draft_id');
   const { data: admin } = await supabase.from('league_members').select('role')
     .eq('league_id', leagueId).eq('user_id', userId).single();
-  if (admin?.role !== 'admin') redirect(home(leagueId, 'overview', 'Solo l’admin può eliminare le bozze'));
+  if (admin?.role !== 'admin') redirect(home(leagueId, 'overview', 'Solo l’amministratore può eliminare le bozze'));
   const { error } = await supabase.from('team_drafts').delete().eq('id', draftId)
     .eq('league_id', leagueId).select('id').single();
   if (error) redirect(home(leagueId, 'manage', error.message));

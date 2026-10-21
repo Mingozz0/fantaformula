@@ -38,22 +38,48 @@ export type EventScore = {
   reserveUsed: boolean;
 };
 
-export function scoreDriver(result: DriverResult | undefined, rules: ScoringRules, sprint: boolean): number {
-  if (!result || !result.formation_lap || result.result_status === 'dns') return 0;
+export type ScoreComponent = { label: string; points: number };
+export type ScoreBreakdown = { total: number; components: ScoreComponent[]; explanation?: string };
+
+export function explainDriverScore(result: DriverResult | undefined, rules: ScoringRules, sprint: boolean): ScoreBreakdown {
+  if (!result) return { total: 0, components: [], explanation: 'Risultato del pilota non disponibile.' };
+  if (!result.formation_lap) return { total: 0, components: [], explanation: 'Non ha preso parte al giro di formazione: nessun punto.' };
+  if (result.result_status === 'dns') return { total: 0, components: [], explanation: 'Non è partito: nessun punto.' };
   if (result.result_status === 'dnf' || result.result_status === 'dsq') {
-    return sprint ? rules.sprint_retirement : rules.gp_retirement;
+    const penalty = sprint ? rules.sprint_retirement : rules.gp_retirement;
+    return { total: penalty, components: [{ label: result.result_status === 'dnf' ? 'Penalità per ritiro' : 'Penalità per squalifica', points: penalty }],
+      explanation: 'Si applica soltanto la penalità prevista dal regolamento.' };
   }
-  if (result.result_status !== 'finished' || result.finish_position === null) return 0;
+  if (result.result_status !== 'finished' || result.finish_position === null) return { total: 0, components: [], explanation: 'Nessun piazzamento valido per il calcolo dei punti.' };
   const finishPoints = sprint ? rules.sprint_finish_points : rules.gp_finish_points;
   const gridPoints = sprint ? rules.sprint_grid_points : rules.gp_grid_points;
   const movement = result.grid_position === null ? 0 :
     (result.grid_position - result.finish_position) *
     (sprint ? rules.sprint_position_delta : rules.gp_position_delta);
-  return (finishPoints[result.finish_position - 1] ?? 0)
-    + (result.grid_position === null ? 0 : (gridPoints[result.grid_position - 1] ?? 0))
-    + movement
-    + (result.fastest_lap ? (sprint ? rules.sprint_fastest_lap : rules.gp_fastest_lap) : 0)
-    + (!sprint && result.driver_of_the_day ? rules.driver_of_the_day : 0);
+  const delta = result.grid_position === null ? null : result.grid_position - result.finish_position;
+  const components: ScoreComponent[] = [
+    { label: `Arrivo al ${result.finish_position}º posto`, points: finishPoints[result.finish_position - 1] ?? 0 },
+    { label: result.grid_position === null ? 'Griglia non disponibile' : `Partenza dal ${result.grid_position}º posto`, points: result.grid_position === null ? 0 : (gridPoints[result.grid_position - 1] ?? 0) },
+    { label: delta === null ? 'Variazione di posizione non calcolabile' : delta === 0 ? 'Posizione mantenuta' : `${Math.abs(delta)} ${Math.abs(delta) === 1 ? 'posizione' : 'posizioni'} ${delta > 0 ? (Math.abs(delta) === 1 ? 'guadagnata' : 'guadagnate') : (Math.abs(delta) === 1 ? 'persa' : 'perse')}`, points: movement },
+  ];
+  if (result.fastest_lap) components.push({ label: 'Bonus giro veloce', points: sprint ? rules.sprint_fastest_lap : rules.gp_fastest_lap });
+  if (!sprint && result.driver_of_the_day) components.push({ label: 'Bonus pilota del giorno', points: rules.driver_of_the_day });
+  return { total: components.reduce((sum, component) => sum + component.points, 0), components };
+}
+
+export function scoreDriver(result: DriverResult | undefined, rules: ScoringRules, sprint: boolean): number {
+  return explainDriverScore(result, rules, sprint).total;
+}
+
+export function explainConstructorScore(constructorId: number, results: DriverResult[], rules: ScoringRules,
+  sprint: boolean, fastestPitConstructorId: number | null = null): ScoreBreakdown {
+  const bestFinish = results
+    .filter((result) => result.constructor_id === constructorId && result.result_status === 'finished' && result.finish_position !== null)
+    .reduce<number | null>((best, result) => best === null || result.finish_position! < best ? result.finish_position : best, null);
+  const finishPoints = sprint ? rules.sprint_finish_points : rules.gp_finish_points;
+  const components: ScoreComponent[] = [{ label: bestFinish === null ? 'Nessun pilota della scuderia arrivato' : `Miglior arrivo della scuderia: ${bestFinish}º posto`, points: bestFinish === null ? 0 : (finishPoints[bestFinish - 1] ?? 0) }];
+  if (!sprint && fastestPitConstructorId === constructorId) components.push({ label: 'Bonus miglior sosta ai box', points: rules.fastest_pit_stop });
+  return { total: components.reduce((sum, component) => sum + component.points, 0), components };
 }
 
 export function scoreEvent(
@@ -78,14 +104,7 @@ export function scoreEvent(
     }
   }
   const driverScores = selected.map((id) => scoreDriver(byDriver.get(id), rules, sprint));
-  const bestFinish = results
-    .filter((result) => result.constructor_id === constructorId
-      && result.result_status === 'finished' && result.finish_position !== null)
-    .reduce<number | null>((best, result) =>
-      best === null || result.finish_position! < best ? result.finish_position : best, null);
-  const finishPoints = sprint ? rules.sprint_finish_points : rules.gp_finish_points;
-  const constructorScore = (bestFinish === null ? 0 : (finishPoints[bestFinish - 1] ?? 0))
-    + (!sprint && fastestPitConstructorId === constructorId ? rules.fastest_pit_stop : 0);
+  const constructorScore = explainConstructorScore(constructorId, results, rules, sprint, fastestPitConstructorId).total;
   return {
     driverIds: selected,
     driverScores,

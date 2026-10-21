@@ -33,7 +33,7 @@ export async function saveResults(form: FormData) {
   const dotd = Number(field(form, 'dotd_driver_id'));
   const pit = Number(field(form, 'pit_constructor_id'));
   if (!fastest || (event === 'gp' && (!dotd || !pit))) {
-    redirect(message(raceId, event, 'Seleziona giro veloce e, per il GP, pilota del giorno e miglior pit stop'));
+    redirect(message(raceId, event, 'Seleziona il giro veloce e, per il Gran Premio, il pilota del giorno e la migliore sosta ai box'));
   }
   const gridSet = new Set<number>();
   const finishSet = new Set<number>();

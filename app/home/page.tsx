@@ -1,4 +1,7 @@
 import { NavigationLink as Link, SubmitButton } from '@/app/components/action-feedback';
+import { FormSelect } from '@/app/components/form-select';
+import { RaceResults } from '@/app/components/race-results';
+import { leagueStatusLabel } from '@/lib/labels';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { scoreEvent, type DriverResult, type FantasyLineup, type ScoringRules } from '@/lib/scoring';
@@ -111,6 +114,8 @@ export default async function HomePage({ searchParams }: {
   const now = await currentTime();
   const nextRace = races.find((race) => race.lineup_deadline_at && Date.parse(race.lineup_deadline_at) > now);
   const raceForLineup = races.find((race) => race.id === Number(params.race)) ?? nextRace ?? races.at(-1);
+  const raceForResults = races.find((race) => race.id === Number(params.race))
+    ?? races.filter((race) => race.gp_published || race.sprint_published).at(-1) ?? races[0];
   const scoreFor = (team: Team, race: Race) => {
     const lineup = lineups.find((item) => item.fantasy_team_id === team.id && item.race_id === race.id) ?? null;
     const gp = race.gp_published && rules ? scoreEvent(lineup, team.constructor_id,
@@ -120,10 +125,10 @@ export default async function HomePage({ searchParams }: {
       sprintResults.filter((item) => item.race_id === race.id), rules, true) : null;
     return { lineup, gp, sprint, total: (gp?.total ?? 0) + (sprint?.total ?? 0) };
   };
-  const standings = (needsScores ? teams : []).map((team) => ({ team,
+  const standings = (tab === 'overview' || tab === 'standings' ? teams : []).map((team) => ({ team,
     points: races.reduce((sum, race) => sum + scoreFor(team, race).total, 0),
   })).sort((a, b) => b.points - a.points || a.team.name.localeCompare(b.team.name));
-  const provisional = needsScores && races.some((race) => (race.gp_published || race.sprint_published)
+  const provisional = tab === 'standings' && races.some((race) => (race.gp_published || race.sprint_published)
     && ((race.has_sprint && !race.sprint_published) || !race.gp_published
       || teams.some((team) => !lineups.some((lineup) => lineup.fantasy_team_id === team.id && lineup.race_id === race.id))));
 
@@ -131,8 +136,8 @@ export default async function HomePage({ searchParams }: {
     <div className="mx-auto max-w-7xl px-5 py-7"><Header name={ownerName(userId)} manager={Boolean(managerData)} />
       <div className="mt-7 grid gap-7 lg:grid-cols-[230px_1fr]">
         <aside className="h-fit rounded-2xl bg-zinc-950 p-4 text-white lg:sticky lg:top-5">
-          <p className="px-2 text-xs font-bold uppercase tracking-widest text-zinc-500">Lega attiva</p>
-          <p className="mt-3 rounded-lg bg-zinc-800 p-2 text-sm font-bold">{selected.name} · {selected.status}</p>
+          <p className="px-2 text-xs font-bold uppercase tracking-widest text-zinc-500">Lega selezionata</p>
+          <p className="mt-3 rounded-lg bg-zinc-800 p-2 text-sm font-bold">{selected.name} · {leagueStatusLabel(selected.status)}</p>
           {leagues.length > 1 && <div className="mt-3 space-y-1">{leagues.map((league) =>
             <Link className={`block rounded-lg px-3 py-2 text-sm ${league.id === selected.id ? 'bg-red-600' : 'hover:bg-zinc-800'}`}
               key={league.id} href={url(league.id, 'overview')}>{league.name}</Link>)}</div>}
@@ -146,7 +151,7 @@ export default async function HomePage({ searchParams }: {
         </aside>
         <section className="min-w-0 space-y-6">
           {params.message && <p role="status" className="rounded-xl bg-amber-100 p-3 text-sm font-medium text-amber-950">{params.message}</p>}
-          <div><p className="text-xs font-bold uppercase tracking-widest text-red-600">Stagione 2026 · {selected.status}</p>
+          <div><p className="text-xs font-bold uppercase tracking-widest text-red-600">Stagione 2026 · {leagueStatusLabel(selected.status)}</p>
             <h1 className="mt-1 text-4xl font-black">{selected.name}</h1>
             <p className="mt-2 text-zinc-500">{members.length} di 7 partecipanti · {isAdmin ? 'Amministratore' : 'Partecipante'}</p></div>
 
@@ -194,7 +199,7 @@ export default async function HomePage({ searchParams }: {
                   lineup={lineups.find((item) => item.fantasy_team_id === myTeam.id && item.race_id === raceForLineup.id)}
                   driverName={driverName} />}
               {raceForLineup.lineup_deadline_at && now >= Date.parse(raceForLineup.lineup_deadline_at) &&
-                <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">La scadenza è passata. Solo l’admin può recuperare questa formazione.</p>}
+                <p className="mb-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">La scadenza è passata. Solo l’amministratore può recuperare questa formazione.</p>}
               {selected.status === 'active' && isAdmin && raceForLineup.lineup_deadline_at && now >= Date.parse(raceForLineup.lineup_deadline_at) &&
                 <div className="space-y-6">{teams.map((team) => <div key={team.id} className="border-t border-zinc-200 pt-5">
                   <h3 className="mb-3 font-bold">{team.name} · {ownerName(team.user_id)}</h3>
@@ -218,31 +223,10 @@ export default async function HomePage({ searchParams }: {
             <p className="mt-4 text-xs text-zinc-500">Contano solo i risultati pubblicati. Le formazioni mancanti valgono zero punti.</p>
           </Card>}
 
-          {tab === 'results' && <div className="space-y-4">{races.map((race) => {
-            const published = race.gp_published || race.sprint_published;
-            const gp = gpResults.filter((item) => item.race_id === race.id).sort((a,b) =>
-              (a.finish_position ?? 999) - (b.finish_position ?? 999));
-            const sprint = sprintResults.filter((item) => item.race_id === race.id).sort((a,b) =>
-              (a.finish_position ?? 999) - (b.finish_position ?? 999));
-            return <Card key={race.id} title={`${race.round}. ${race.name} · ${dateLabel(race.race_date)}`}>
-              <p className="text-sm text-zinc-500">{race.gp_published ? 'GP pubblicato' : 'GP in attesa'}
-                {race.has_sprint ? ` · Sprint ${race.sprint_published ? 'pubblicata' : 'in attesa'}` : ''}</p>
-              {published && <div className="mt-4 grid gap-4 lg:grid-cols-2"><div>
-                <h3 className="font-bold">Risultato GP</h3><div className="mt-2 space-y-1 text-sm">{race.gp_published && gp.map((result) =>
-                  <p key={result.driver_id}>{result.finish_position ?? '–'}. {driverName(result.driver_id)} · {result.result_status}</p>)}</div>
-                {race.sprint_published && <><h3 className="mt-5 font-bold">Risultato Sprint</h3><div className="mt-2 space-y-1 text-sm">
-                  {sprint.map((result) => <p key={result.driver_id}>{result.finish_position ?? '–'}. {driverName(result.driver_id)} · {result.result_status}</p>)}
-                </div></>}
-              </div><div><h3 className="font-bold">Punti fantasy della lega</h3>
-                <div className="mt-2 space-y-2 text-sm">{teams.map((team) => {
-                  const score = scoreFor(team, race);
-                  return <p key={team.id}>{team.name}: <strong>{score.total} pt</strong>
-                    {score.gp && ` · GP ${score.gp.total} (piloti ${score.gp.driverScores.join(' + ')}, scuderia ${score.gp.constructorScore})`}
-                    {score.sprint && ` · Sprint ${score.sprint.total} (piloti ${score.sprint.driverScores.join(' + ')}, scuderia ${score.sprint.constructorScore})`}
-                    {(score.gp?.reserveUsed || score.sprint?.reserveUsed) && ' · riserva subentrata'}</p>;
-                })}</div></div></div>}
-            </Card>;
-          })}</div>}
+          {tab === 'results' && (raceForResults ? <RaceResults race={raceForResults} races={races} leagueId={selected.id}
+            teams={teams} drivers={drivers} constructors={constructorRows} profiles={profiles} lineups={lineups}
+            gpResults={gpResults} sprintResults={sprintResults} pitResults={pitResults} rules={rules} />
+            : <Card title="Risultati"><p>Il calendario non è ancora disponibile.</p></Card>)}
 
           {tab === 'manage' && isAdmin && <>
             <div>
@@ -263,13 +247,8 @@ export default async function HomePage({ searchParams }: {
                   <form action={assignTeamDraft} className="flex flex-wrap items-end gap-3">
                     <input type="hidden" name="league_id" value={selected.id} />
                     <input type="hidden" name="draft_id" value={draft.id} />
-                    <label className="text-sm font-semibold">Assegna a
-                      <select name="user_id" required defaultValue="" className="mt-1 block rounded-lg border p-2.5">
-                        <option value="">Seleziona partecipante</option>
-                        {membersWithoutTeam.map((member) => <option key={member.user_id} value={member.user_id}>
-                          {ownerName(member.user_id)}</option>)}
-                      </select>
-                    </label>
+                    <FormSelect name="user_id" label="Assegna a" required disabled={!membersWithoutTeam.length}
+                      placeholder="Seleziona partecipante" options={membersWithoutTeam.map((member) => ({ value: member.user_id, label: ownerName(member.user_id) }))} />
                     <SubmitButton pendingLabel="Assegnazione…" disabled={!membersWithoutTeam.length} className="rounded-lg bg-red-600 px-4 py-2.5 font-bold text-white">Assegna</SubmitButton>
                   </form>
                   <form action={deleteTeamDraft}>
@@ -297,13 +276,11 @@ export default async function HomePage({ searchParams }: {
                     <input type="hidden" name="league_id" value={selected.id} /><input type="hidden" name="user_id" value={member.user_id} />
                     <input name="name" required minLength={2} defaultValue={team?.name ?? ''} placeholder="Nome squadra" className="w-full rounded-lg border p-2" />
                     <div className="grid gap-3 md:grid-cols-4">
-                      {[1,2,3].map((n) => <select required key={n} name={`driver_${['one','two','three'][n-1]}_id`}
-                        defaultValue={team?.[`driver_${['one','two','three'][n-1]}_id` as keyof Team] ?? ''}
-                        className="rounded-lg border p-2"><option value="">Pilota {n}</option>
-                        {drivers.map((d) => <option key={d.id} value={d.id}>{driverName(d.id)}</option>)}</select>)}
-                      <select required name="constructor_id" defaultValue={team?.constructor_id ?? ''} className="rounded-lg border p-2">
-                        <option value="">Scuderia</option>{constructorRows.map((row) => <option key={row.constructor_id} value={row.constructor_id}>{constructorName(row.constructor_id)}</option>)}
-                      </select>
+                      {(['one','two','three'] as const).map((slot, index) => <FormSelect required key={slot} name={`driver_${slot}_id`}
+                        label={`Pilota ${index + 1}`} defaultValue={team?.[`driver_${slot}_id`]}
+                        options={drivers.map((driver) => ({ value: driver.id, label: driverName(driver.id) }))} />)}
+                      <FormSelect required name="constructor_id" label="Scuderia" defaultValue={team?.constructor_id}
+                        options={constructorRows.map((row) => ({ value: row.constructor_id, label: constructorName(row.constructor_id) }))} />
                     </div><SubmitButton className="rounded-lg bg-zinc-950 px-4 py-2 font-bold text-white">{team ? 'Aggiorna squadra' : 'Crea squadra'}</SubmitButton>
                   </form>
                 </details>;
@@ -366,22 +343,11 @@ function TeamDraftForm({ leagueId, draft, drivers, constructorRows, driverName }
       </label>
     </div>
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {(['one', 'two', 'three'] as const).map((slot, index) => <label key={slot} className="text-sm font-semibold">
-        Pilota {index + 1}
-        <select name={`driver_${slot}_id`} required defaultValue={draft?.[`driver_${slot}_id`] ?? ''}
-          className="mt-1 block w-full rounded-lg border p-2.5">
-          <option value="">Seleziona</option>
-          {drivers.map((driver) => <option key={driver.id} value={driver.id}>{driverName(driver.id)}</option>)}
-        </select>
-      </label>)}
-      <label className="text-sm font-semibold">Scuderia
-        <select name="constructor_id" required defaultValue={draft?.constructor_id ?? ''}
-          className="mt-1 block w-full rounded-lg border p-2.5">
-          <option value="">Seleziona</option>
-          {constructorRows.map((row) => <option key={row.constructor_id} value={row.constructor_id}>
-            {row.display_name}</option>)}
-        </select>
-      </label>
+      {(['one', 'two', 'three'] as const).map((slot, index) => <FormSelect key={slot} label={`Pilota ${index + 1}`}
+        name={`driver_${slot}_id`} required defaultValue={draft?.[`driver_${slot}_id`]}
+        options={drivers.map((driver) => ({ value: driver.id, label: driverName(driver.id) }))} />)}
+      <FormSelect label="Scuderia" name="constructor_id" required defaultValue={draft?.constructor_id}
+        options={constructorRows.map((row) => ({ value: row.constructor_id, label: row.display_name }))} />
     </div>
     <SubmitButton className="rounded-lg bg-zinc-950 px-4 py-2.5 font-bold text-white">
       {draft ? 'Salva modifiche' : 'Prepara squadra'}
@@ -396,12 +362,11 @@ function LineupForm({ leagueId, race, team, lineup, driverName }: {
     <input type="hidden" name="league_id" value={leagueId} />
     <input type="hidden" name="fantasy_team_id" value={team.id} />
     <input type="hidden" name="race_id" value={race.id} />
-    {['one','two'].map((slot, index) => <label key={slot} className="text-sm font-semibold">Titolare {index + 1}
-      <select name={`driver_${slot}_id`} required defaultValue={index === 0 ? lineup?.driver_one_id ?? '' : lineup?.driver_two_id ?? ''}
-        className="mt-1 w-full rounded-lg border p-2.5"><option value="">Seleziona</option>
-        {roster.map((id) => <option key={id} value={id}>{driverName(id)}</option>)}</select></label>)}
+    {['one','two'].map((slot, index) => <FormSelect key={slot} label={`Titolare ${index + 1}`} name={`driver_${slot}_id`}
+      required defaultValue={index === 0 ? lineup?.driver_one_id : lineup?.driver_two_id}
+      options={roster.map((id) => ({ value: id, label: driverName(id) }))} />)}
     <SubmitButton className="self-end rounded-lg bg-red-600 px-4 py-2.5 font-bold text-white">Salva</SubmitButton>
     <p className="text-xs text-zinc-500 md:col-span-3">La riserva è automaticamente il terzo pilota non schierato.
-      {lineup && ` Ultimo salvataggio: ${lineup.retroactive ? 'recupero admin' : 'utente'}.`}</p>
+      {lineup && ` Ultimo salvataggio: ${lineup.retroactive ? 'recupero dell’amministratore' : 'partecipante'}.`}</p>
   </form>;
 }
