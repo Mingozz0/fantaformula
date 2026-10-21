@@ -11,7 +11,7 @@ import { signOut } from '@/app/home/actions';
 
 export type PortalLeague = { id: string; name: string; status: string };
 type ShellProps = { children: ReactNode; name: string; leagues: PortalLeague[];
-  selectedLeagueId?: string; activeTab: string; isAdmin: boolean; isManager: boolean; defaultOpen?: boolean };
+  selectedLeagueId?: string; activeTab: string; isAdmin: boolean; isManager: boolean; defaultOpen?: boolean; pageTitle?: string };
 
 const sections = [
   { id: 'overview', label: 'Panoramica', icon: House },
@@ -75,8 +75,8 @@ function PortalSidebar({ name, leagues, selectedLeagueId, activeTab, isAdmin, is
   </Sidebar>;
 }
 
-export function PortalShell({ children, defaultOpen = true, ...props }: ShellProps) {
-  const title = sections.find((section) => section.id === props.activeTab)?.label
+export function PortalShell({ children, defaultOpen = true, pageTitle, ...props }: ShellProps) {
+  const title = pageTitle ?? sections.find((section) => section.id === props.activeTab)?.label
     ?? (props.activeTab === 'manager' ? 'Gestisci risultati' : props.activeTab === 'home' ? 'Le mie leghe' : 'Gestione squadre');
   const initials = props.name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join('');
   return <SidebarProvider defaultOpen={defaultOpen} className="min-h-svh bg-[#f6f6f4] text-zinc-950">

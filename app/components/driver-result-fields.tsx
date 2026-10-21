@@ -41,6 +41,5 @@ export function DriverResultFields({ driverId, name, constructors, value, onChan
         onChange={(event) => onChange({ ...value, formation_lap: event.target.checked })} className="size-5 shrink-0 accent-red-600" />
       Ha partecipato al giro di formazione
     </label>
-    <p className="text-xs leading-relaxed text-zinc-500">Ogni posizione può appartenere a un solo pilota. Per ritirati, non partiti e squalificati l’arrivo viene lasciato vuoto.</p>
   </fieldset>;
 }

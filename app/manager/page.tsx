@@ -75,7 +75,7 @@ export default async function ManagerPage({ searchParams }: {
         <form action={publishResults} className="mt-5 border-t border-zinc-200 pt-5"><input type="hidden" name="race_id" value={selected.id} />
           <input type="hidden" name="league_id" value={league?.id ?? ''} />
           <input type="hidden" name="event" value={event} /><SubmitButton pendingLabel="Pubblicazione…" className="rounded-lg bg-zinc-950 px-5 py-3 font-bold text-white">Pubblica risultati</SubmitButton>
-          <p className="mt-2 text-xs text-zinc-500">La pubblicazione richiede tutti i piloti, posizioni coerenti e i bonus della gara.</p></form>
+        </form>
       </div></>}
   </PortalShell>;
 }

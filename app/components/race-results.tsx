@@ -108,7 +108,6 @@ export function RaceResults({ race, races, leagueId, teams, drivers, constructor
         <TabsTrigger value="drivers" className="h-full! min-w-0 gap-1.5 whitespace-normal rounded-lg px-2 text-xs leading-tight sm:gap-2 sm:px-4 sm:text-sm"><Flag className="size-4 shrink-0" />Punti dei piloti</TabsTrigger>
       </TabsList>
       <TabsContent value="league" className="space-y-5">
-        <p className="text-sm leading-relaxed text-zinc-500">Il totale somma i due piloti schierati e la scuderia. Apri una squadra per vedere i punti di piloti e scuderia, i bonus e le penalità.</p>
         {!rules && <p className="rounded-xl bg-amber-50 p-4 text-sm text-amber-900">Regolamento non disponibile: impossibile calcolare i punteggi.</p>}
         <div className="grid items-start gap-5 xl:grid-cols-2">{rules && entries.map((entry) => <details key={entry.team.id} className="group/team overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xs">
           <summary className="flex h-40 cursor-pointer list-none flex-col justify-between gap-3 p-4 sm:p-5 [&::-webkit-details-marker]:hidden">
@@ -139,7 +138,7 @@ export function RaceResults({ race, races, leagueId, teams, drivers, constructor
         {!teams.length && <p className="text-sm text-zinc-500">Nessuna squadra assegnata nella lega.</p>}
       </TabsContent>
       <TabsContent value="drivers" className="space-y-8">{events.filter((event) => event.published).map((event) => <section key={event.key} className="space-y-4">
-        <div><h3 className="text-lg font-black">{event.label} · Ordine di arrivo</h3><p className="mt-1 text-sm text-zinc-500">I punti indicati sono quelli del singolo pilota, prima dell’abbinamento alle formazioni.</p></div>
+        <h3 className="text-lg font-black">{event.label} · Ordine di arrivo</h3>
         <div className="grid auto-rows-fr gap-3 md:grid-cols-2">{event.results.toSorted((a, b) => (a.finish_position ?? Infinity) - (b.finish_position ?? Infinity) || driverName(a.driver_id).localeCompare(driverName(b.driver_id), 'it')).map((result) =>
           <Card key={result.driver_id} className="h-full gap-0 rounded-2xl py-0 shadow-none"><CardContent className="flex h-full flex-col p-4">
             <div className="flex items-start gap-3"><span className={`grid size-10 shrink-0 place-items-center rounded-xl text-sm font-black ${result.finish_position !== null && result.finish_position <= 3 ? 'bg-amber-100 text-amber-800' : 'bg-zinc-100 text-zinc-500'}`}>{result.finish_position ? `${result.finish_position}º` : '—'}</span>

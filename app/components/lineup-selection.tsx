@@ -15,7 +15,7 @@ export function LineupSelection({ options, initialOne, initialTwo }: {
       options={options.map((option) => ({ ...option, disabled: String(option.value) === two }))} />
     <FormSelect label="Titolare 2" name="driver_two_id" required value={two} onValueChange={setTwo}
       options={options.map((option) => ({ ...option, disabled: String(option.value) === one }))} />
-    <SubmitButton disabled={!one || !two || one === two} className="min-h-11 self-end rounded-lg bg-red-600 px-4 py-2.5 font-bold text-white">Salva formazione</SubmitButton>
+    <div className="flex items-end"><SubmitButton disabled={!one || !two || one === two} className="h-11 w-full rounded-xl bg-red-600 px-4 font-bold text-white">Salva formazione</SubmitButton></div>
     <p aria-live="polite" className="text-xs text-zinc-500 md:col-span-3">{reserve ? `Riserva: ${reserve.label}.` : 'Scegli due piloti diversi: il terzo sarà la riserva.'}</p>
   </>;
 }
