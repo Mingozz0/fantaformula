@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { ArrowLeft, ArrowUpRight, Flag, Trophy, Users, Zap } from 'lucide-react';
 import { NavigationLink } from './action-feedback';
 import type { TeamStats } from '@/lib/league-stats';
+import { InteractivePointsChart } from './interactive-points-chart';
 
 const colors = ['#e7000b', '#2563eb', '#059669', '#9333ea', '#d97706', '#0891b2', '#db2777'];
 function number(value: number) { return new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 }).format(value); }
@@ -18,24 +19,6 @@ function Stat({ label, value, detail, icon }: { label: string; value: string; de
     <p className="mt-3 break-words text-2xl font-black tabular-nums">{value}</p>
     {detail && <p className="mt-1 break-words text-xs text-zinc-500">{detail}</p>}
   </div>;
-}
-
-function PointsChart({ entries }: { entries: TeamStats[] }) {
-  const rows = entries[0]?.races ?? [];
-  if (!rows.length) return <p className="py-8 text-center text-sm text-zinc-400">Nessuna gara pubblicata</p>;
-  const values = entries.flatMap((entry) => [0, ...entry.races.map((row) => row.cumulative)]);
-  const min = Math.min(0, ...values), max = Math.max(1, ...values), range = max - min;
-  const x = (index: number) => 48 + index * (560 / rows.length);
-  const y = (value: number) => 180 - (value - min) / range * 150;
-  return <svg viewBox="0 0 640 220" role="img" aria-label="Punti cumulativi per tappa" className="h-auto w-full overflow-visible">
-    <title>Punti cumulativi per tappa</title>
-    {[min, min + range / 2, max].map((value) => <g key={value}><line x1="48" x2="608" y1={y(value)} y2={y(value)} stroke="#e4e4e7" strokeDasharray="3 5" /><text x="38" y={y(value) + 4} textAnchor="end" fontSize="11" fill="#71717a">{number(value)}</text></g>)}
-    {entries.map((entry, series) => <g key={entry.team.id}>
-      <polyline fill="none" stroke={colors[series % colors.length]} strokeWidth="3" strokeLinejoin="round" points={[`${x(0)},${y(0)}`, ...entry.races.map((row, index) => `${x(index + 1)},${y(row.cumulative)}`)].join(' ')} />
-      {entry.races.map((row, index) => <circle key={row.race.id} cx={x(index + 1)} cy={y(row.cumulative)} r="4" fill={colors[series % colors.length]}><title>{`${entry.team.name} · ${row.race.name}: ${number(row.cumulative)} punti`}</title></circle>)}
-    </g>)}
-    {rows.filter((_, index) => rows.length <= 8 || index % Math.ceil(rows.length / 7) === 0 || index === rows.length - 1).map((row) => <text key={row.race.id} x={x(rows.indexOf(row) + 1)} y="208" textAnchor="middle" fontSize="11" fill="#71717a">GP {row.race.round}</text>)}
-  </svg>;
 }
 
 export function LeagueDashboard({ entries, leagueId }: { entries: TeamStats[]; leagueId: string }) {
@@ -56,8 +39,7 @@ export function LeagueDashboard({ entries, leagueId }: { entries: TeamStats[]; l
       <Stat label="Più tappe vinte" value={wins ? String(wins) : '—'} detail={wins ? winners.map((entry) => entry.team.name).join(' · ') : undefined} icon={<Flag className="size-3.5" />} />
       <Stat label="Tappe a punteggio" value={String(played)} detail={`${entries.length} squadre`} icon={<Users className="size-3.5" />} />
     </div>
-    <Panel title="Corsa al titolo"><PointsChart entries={entries} />
-      <div className="mt-4 flex flex-wrap gap-x-5 gap-y-3">{entries.map((entry, index) => <NavigationLink key={entry.team.id} href={teamUrl(leagueId, entry.team.id)} className="min-w-0 text-xs font-semibold hover:text-red-600"><span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: colors[index % colors.length] }} />{entry.team.name}</NavigationLink>)}</div>
+    <Panel title="Corsa al titolo"><InteractivePointsChart entries={entries} />
     </Panel>
     <div className="grid gap-5 lg:grid-cols-2">
       <Panel title="Punti totali" action={<NavigationLink href={`/home?league=${leagueId}&tab=standings`} className="text-xs font-bold text-red-600">Classifica<ArrowUpRight className="size-3.5" /></NavigationLink>}>
@@ -97,7 +79,7 @@ export function TeamDashboard({ entry, leagueId, owner, roster, constructor, lea
     <Panel title="Rosa"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{roster.map((name, index) => <div key={index} className="rounded-xl bg-zinc-50 p-4"><p className="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Pilota {index + 1}</p><p className="mt-2 text-sm font-bold">{name}</p></div>)}
       <div className="rounded-xl border border-red-100 bg-red-50/50 p-4"><p className="text-[11px] font-bold uppercase tracking-wider text-red-500">Scuderia</p><p className="mt-2 text-sm font-bold">{constructor}</p></div></div></Panel>
     <div className="grid gap-5 lg:grid-cols-[1.5fr_1fr]">
-      <Panel title="Andamento punti"><PointsChart entries={[entry]} /></Panel>
+      <Panel title="Andamento punti"><InteractivePointsChart entries={[entry]} /></Panel>
       <Panel title="Punti in dettaglio"><dl className="divide-y divide-zinc-100">{[
         ['Gran Premi', `${number(entry.gpPoints)} pt`], ['Sprint', `${number(entry.sprintPoints)} pt`],
         ['Piloti', `${number(entry.driverPoints)} pt`], ['Scuderia', `${number(entry.constructorPoints)} pt`], ['Riserve subentrate', String(entry.reserveUses)],

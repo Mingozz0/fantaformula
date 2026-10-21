@@ -20,19 +20,18 @@ export default function LoginPage() {
       return;
     }
     setLoading(true);
-    const { error: authError } = await createClient().auth.signInWithPassword({ email, password });
-    if (authError) {
-      setLoading(false);
-      setError('Accesso non riuscito. Controlla email, password e conferma dell’account.');
-      return;
-    }
-    router.replace('/home');
+    try {
+      const { error: authError } = await createClient().auth.signInWithPassword({ email, password });
+      if (authError) { setError('Accesso non riuscito. Controlla email, password e conferma dell’account.'); return; }
+      router.replace('/home');
+    } catch { setError('Connessione non disponibile. Riprova tra poco.'); }
+    finally { setLoading(false); }
   }
 
   return (
-    <main className="min-h-screen bg-[#0d0d0f] text-white">
-      <div className="mx-auto grid min-h-screen max-w-7xl lg:grid-cols-[1.15fr_0.85fr]">
-        <section className="flex flex-col justify-between overflow-hidden bg-[radial-gradient(circle_at_20%_20%,#8f111a,transparent_35%),linear-gradient(135deg,#151519,#09090b)] p-8 md:p-14">
+    <main className="min-h-svh bg-[#0d0d0f] text-white">
+      <div className="mx-auto grid min-h-svh max-w-7xl lg:grid-cols-[1.15fr_0.85fr]">
+        <section className="hidden flex-col justify-between overflow-hidden bg-[radial-gradient(circle_at_20%_20%,#8f111a,transparent_35%),linear-gradient(135deg,#151519,#09090b)] p-8 lg:flex lg:p-14">
           <Link href="/" className="flex items-center gap-3 text-lg font-black tracking-tight">
             <span className="grid h-10 w-10 place-items-center rounded-xl bg-red-600"><Flag size={21} /></span>
             GRID<span className="text-red-500">F1</span>
@@ -48,8 +47,9 @@ export default function LoginPage() {
             <Stat icon={<Flag size={18} />} value="1" label="scuderia" />
           </div>
         </section>
-        <section className="flex items-center justify-center bg-zinc-950 p-6 md:p-12">
+        <section className="flex items-center justify-center bg-zinc-950 px-5 py-8 sm:p-10 lg:p-12">
           <div className="w-full max-w-md">
+            <Link href="/" className="mb-8 flex items-center gap-2 text-lg font-black lg:hidden"><span className="grid size-9 place-items-center rounded-xl bg-red-600"><Flag className="size-5" /></span>GRID<span className="text-red-500">F1</span></Link>
             <p className="text-sm font-bold uppercase tracking-[0.2em] text-zinc-500">Bentornato</p>
             <h2 className="mt-3 text-3xl font-bold">Accedi alla tua lega</h2>
             <p className="mt-2 text-zinc-400">Accedi con il tuo account GRIDF1.</p>

@@ -22,7 +22,15 @@ Nel progetto Supabase, in **Authentication → URL Configuration**, configura `h
 3. L'admin della lega può preparare squadre per ragazzi non ancora registrati. Quando entrano con il codice invito, assegna loro le squadre preparate; può anche creare o modificare direttamente la squadra di un membro già entrato. La lega si attiva solo con 4–7 membri registrati e una squadra assegnata a ciascuno.
 4. Il partecipante vede la rosa e salva la formazione del prossimo GP: 2 titolari; il terzo pilota è automaticamente la riserva. La scuderia della rosa è sempre schierata.
 5. Per i GP già conclusi, l'admin può recuperare le formazioni delle squadre della propria lega. Il recupero è registrato in `lineup_audit`.
-6. Il gestore globale inserisce i risultati GP e Sprint, poi li pubblica. Solo i risultati pubblicati entrano nella classifica e nella pagina Risultati. Se li corregge, la gara torna non pubblicata finché non viene confermata di nuovo.
+6. Il gestore globale inserisce i risultati GP e Sprint in una bozza, salvata automaticamente e recuperabile. Solo la pubblicazione aggiorna classifica e risultati, con un’unica transazione per piloti e scuderie. Le correzioni in bozza non modificano la versione già pubblicata.
+
+## Bozze e statistiche
+
+- `result_drafts` conserva una bozza per gara ed evento, leggibile e modificabile soltanto dai gestori (`game_managers`). È possibile salvare dati incompleti; i controlli completi scattano alla pubblicazione.
+- Ogni salvataggio usa una versione per impedire sovrascritture da altre finestre. Una copia temporanea nella sessione del browser protegge le modifiche durante un’interruzione della connessione.
+- I grafici della lega permettono di scegliere le squadre, confrontarne due, filtrare GP/Sprint, punti per tappa, cumulativi e posizioni.
+- Le statistiche avanzate sono visibili soltanto ai gestori e restano riferite alla lega selezionata: contributi dei piloti, punti migliorabili nelle formazioni consegnate, assenze e continuità.
+- Applicare `supabase/migrations/20261021142220_result_drafts.sql` prima del codice che usa le nuove funzioni RPC.
 
 **Scadenze:** GP normali alle 00:00 di sabato in `Europe/Rome` (fine del venerdì); weekend Sprint all'inizio della qualifica Sprint. Il database verifica la scadenza. Chi non presenta la formazione prende 0 punti nel weekend.
 

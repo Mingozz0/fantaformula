@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { homeUrl as home } from '@/lib/portal-navigation';
+import { actionError } from '@/lib/query-errors';
 
 function textField(form: FormData, key: string) { return String(form.get(key) ?? '').trim(); }
 function numberField(form: FormData, key: string) { return Number(textField(form, key)); }
@@ -32,7 +33,7 @@ export async function createLeague(form: FormData) {
     .insert({ name, season_id: season.id, created_by: userId })
     .select('id').single();
   if (error || !data) redirect(home(undefined, undefined,
-    error?.code === '23505' ? 'Hai già una lega 2026 con questo nome' : error?.message ?? 'Creazione non riuscita'));
+    error?.code === '23505' ? 'Hai già una lega 2026 con questo nome' : actionError(error)));
   revalidatePath('/home');
   redirect(home(data.id, 'manage', 'Lega creata'));
 }
@@ -41,7 +42,7 @@ export async function joinLeague(form: FormData) {
   const { supabase } = await authenticated();
   const code = textField(form, 'code');
   const { data, error } = await supabase.rpc('join_league', { code });
-  if (error || !data) redirect(home(undefined, undefined, error?.message ?? 'Codice non valido'));
+  if (error || !data) redirect(home(undefined, undefined, 'Codice non valido o iscrizioni chiuse'));
   revalidatePath('/home');
   redirect(home(String(data), 'overview', 'Sei entrato nella lega'));
 }
@@ -68,7 +69,7 @@ export async function saveTeam(form: FormData) {
     ? await supabase.from('fantasy_teams').update(payload).eq('id', existing.id)
     : await supabase.from('fantasy_teams').insert({ ...payload, league_id: leagueId,
       season_id: league.season_id, user_id: userId });
-  if (response.error) redirect(home(leagueId, 'manage', response.error.message));
+  if (response.error) redirect(home(leagueId, 'manage', actionError(response.error)));
   revalidatePath('/home');
   redirect(home(leagueId, 'manage', 'Squadra salvata'));
 }
@@ -99,7 +100,7 @@ export async function saveTeamDraft(form: FormData) {
       .select('id').single()
     : await supabase.from('team_drafts').insert({ ...payload, league_id: leagueId,
       season_id: league.season_id }).select('id').single();
-  if (response.error) redirect(home(leagueId, 'manage', response.error.message));
+  if (response.error) redirect(home(leagueId, 'manage', actionError(response.error)));
   revalidatePath('/home');
   redirect(home(leagueId, 'manage', draftId ? 'Squadra in attesa aggiornata' : 'Squadra in attesa salvata'));
 }
@@ -118,7 +119,7 @@ export async function assignTeamDraft(form: FormData) {
   if (!draft) redirect(home(leagueId, 'manage', 'Squadra in attesa non trovata'));
   const { error } = await supabase.rpc('assign_team_draft', { p_draft_id: draftId, p_user_id: recipientId });
   if (error) redirect(home(leagueId, 'manage', error.code === '23505'
-    ? 'Questo partecipante ha già una squadra' : error.message));
+    ? 'Questo partecipante ha già una squadra' : actionError(error)));
   revalidatePath('/home');
   redirect(home(leagueId, 'manage', 'Squadra assegnata al partecipante'));
 }
@@ -132,7 +133,7 @@ export async function deleteTeamDraft(form: FormData) {
   if (admin?.role !== 'admin') redirect(home(leagueId, 'overview', 'Solo l’amministratore può eliminare le bozze'));
   const { error } = await supabase.from('team_drafts').delete().eq('id', draftId)
     .eq('league_id', leagueId).select('id').single();
-  if (error) redirect(home(leagueId, 'manage', error.message));
+  if (error) redirect(home(leagueId, 'manage', actionError(error)));
   revalidatePath('/home');
   redirect(home(leagueId, 'manage', 'Squadra in attesa eliminata'));
 }
@@ -141,7 +142,7 @@ export async function activateLeague(form: FormData) {
   const { supabase } = await authenticated();
   const leagueId = textField(form, 'league_id');
   const { error } = await supabase.from('leagues').update({ status: 'active' }).eq('id', leagueId);
-  if (error) redirect(home(leagueId, 'manage', error.message));
+  if (error) redirect(home(leagueId, 'manage', actionError(error)));
   revalidatePath('/home');
   redirect(home(leagueId, 'manage', 'Lega attivata'));
 }
@@ -181,7 +182,7 @@ export async function saveLineup(form: FormData) {
     ? await supabase.from('lineups').update(payload).eq('id', existing.id)
     : await supabase.from('lineups').insert({ ...payload, fantasy_team_id: teamId,
       league_id: leagueId, season_id: team.season_id, race_id: raceId });
-  if (response.error) redirect(home(leagueId, 'lineup', response.error.message, raceId));
+  if (response.error) redirect(home(leagueId, 'lineup', actionError(response.error), raceId));
   revalidatePath('/home');
   redirect(home(leagueId, 'lineup', retroactive ? 'Formazione passata registrata' : 'Formazione salvata', raceId));
 }

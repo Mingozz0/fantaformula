@@ -8,6 +8,9 @@ import { LeagueEntrance } from '@/app/components/league-entrance';
 import { leagueStatusLabel } from '@/lib/labels';
 import { LeagueDashboard, TeamDashboard } from '@/app/components/league-dashboard';
 import { buildLeagueStats } from '@/lib/league-stats';
+import { assertQuery } from '@/lib/query-errors';
+import { AdvancedDashboard } from '@/app/components/advanced-dashboard';
+import { buildAdvancedStats } from '@/lib/advanced-stats';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
@@ -57,18 +60,21 @@ export default async function HomePage({ searchParams }: {
   const userId = auth?.claims?.sub;
   if (!userId) redirect('/');
   const sidebarOpen = (await cookies()).get('sidebar_state')?.value !== 'false';
-  const [{ data: membershipsData, error: membershipsError }, { data: managerData }] = await Promise.all([
+  const metadata = await Promise.all([
     supabase.from('league_members').select('league_id,role,leagues!inner(id,name,season_id,status,invite_code)').eq('user_id', userId),
     supabase.from('game_managers').select('user_id').eq('user_id', userId).maybeSingle(),
   ]);
-  if (membershipsError) throw new Error('Impossibile caricare le leghe. Riprova tra poco.');
+  metadata.forEach((result) => assertQuery(result, 'Impossibile caricare le leghe'));
+  const [{ data: membershipsData }, { data: managerData }] = metadata;
   const memberships = (membershipsData ?? []) as unknown as Membership[];
   const leagues = memberships.map((membership) => membership.leagues);
   const selected = leagues.find((league) => league.id === params.league);
-  const tab = ['overview', 'team', 'lineup', 'standings', 'results', 'manage'].includes(params.tab ?? '')
+  const tab = ['overview', 'team', 'lineup', 'standings', 'results', 'manage', 'analytics'].includes(params.tab ?? '')
     ? params.tab! : 'overview';
   if (!selected) {
-    const { data: profile } = await supabase.from('profiles').select('display_name').eq('id', userId).maybeSingle();
+    const profileResult = await supabase.from('profiles').select('display_name').eq('id', userId).maybeSingle();
+    assertQuery(profileResult, 'Impossibile caricare il profilo');
+    const { data: profile } = profileResult;
     return <PortalShell defaultOpen={sidebarOpen} name={profile?.display_name ?? 'Il tuo account'} leagues={leagues} activeTab="home" isAdmin={false} isManager={Boolean(managerData)}>
       {params.message && <p role="status" className="rounded-xl bg-amber-100 p-3 text-sm text-amber-950">{params.message}</p>}
       <LeagueEntrance leagues={memberships.map((membership) => ({ ...membership.leagues, role: membership.role }))}><LeagueForms /></LeagueEntrance>
@@ -77,16 +83,15 @@ export default async function HomePage({ searchParams }: {
 
   const isAdmin = memberships.some((membership) =>
     membership.league_id === selected.id && membership.role === 'admin');
-  const needsStats = ['overview', 'team', 'standings'].includes(tab);
+  if (tab === 'analytics' && !managerData) redirect(url(selected.id, 'overview'));
+  if (tab === 'manage' && !isAdmin) redirect(url(selected.id, 'overview'));
+  const needsStats = ['overview', 'team', 'standings', 'analytics'].includes(tab);
   const needsScores = needsStats || tab === 'results';
-  const needsDrivers = ['team', 'lineup', 'results', 'manage'].includes(tab);
+  const needsDrivers = ['team', 'lineup', 'results', 'manage', 'analytics'].includes(tab);
   const needsConstructors = ['team', 'results', 'manage'].includes(tab);
   const needsRaces = needsScores || tab === 'lineup';
   const emptyRows = { data: [] };
-  const [{ data: membersData }, { data: teamsData }, { data: seasonDriversData },
-    { data: constructorsData }, { data: racesData }, { data: rulesData },
-    { data: lineupsData }, { data: gpData }, { data: sprintData }, { data: pitData },
-    { data: draftsData }] = await Promise.all([
+  const leagueData = await Promise.all([
     supabase.from('league_members').select('user_id,role').eq('league_id', selected.id),
     supabase.from('fantasy_teams').select('*').eq('league_id', selected.id),
     needsDrivers ? supabase.from('season_drivers').select('driver_id,drivers!inner(id,first_name,last_name)')
@@ -102,12 +107,18 @@ export default async function HomePage({ searchParams }: {
     needsScores ? supabase.from('race_constructor_results').select('*').eq('season_id', selected.season_id) : emptyRows,
     isAdmin && tab === 'manage' ? supabase.from('team_drafts').select('*').eq('league_id', selected.id).order('created_at') : emptyRows,
   ]);
+  leagueData.forEach((result) => assertQuery(result, 'Impossibile caricare i dati della lega'));
+  const [{ data: membersData }, { data: teamsData }, { data: seasonDriversData },
+    { data: constructorsData }, { data: racesData }, { data: rulesData },
+    { data: lineupsData }, { data: gpData }, { data: sprintData }, { data: pitData }, { data: draftsData }] = leagueData;
   const members = (membersData ?? []) as Member[];
   const teams = (teamsData ?? []) as Team[];
   const constructorRows = constructorsData ?? [];
   const races = (racesData ?? []) as Race[];
-  const { data: profilesData } = members.length
+  const profilesResult = members.length
     ? await supabase.from('profiles').select('id,display_name').in('id', members.map((m) => m.user_id)) : emptyRows;
+  assertQuery(profilesResult, 'Impossibile caricare i partecipanti');
+  const { data: profilesData } = profilesResult;
   const profiles = (profilesData ?? []) as Profile[];
   const drivers = ((seasonDriversData ?? []) as unknown as SeasonDriver[]).map((row) => row.drivers);
   const lineups = (lineupsData ?? []) as Lineup[];
@@ -116,6 +127,7 @@ export default async function HomePage({ searchParams }: {
   const pitResults = (pitData ?? []) as Pit[];
   const drafts = (draftsData ?? []) as TeamDraft[];
   const rules = rulesData as ScoringRules | null;
+  if (needsScores && !rules) throw new Error('Regole di punteggio non disponibili per questa stagione.');
   const myTeam = teams.find((team) => team.user_id === userId);
   const membersWithoutTeam = members.filter((member) => !teams.some((team) => team.user_id === member.user_id));
   const driverName = (id: number) => { const d = drivers.find((item) => item.id === id); return d ? `${d.first_name} ${d.last_name}` : `Pilota ${id}`; };
@@ -196,6 +208,9 @@ export default async function HomePage({ searchParams }: {
             teams={teams} drivers={drivers} constructors={constructorRows} profiles={profiles} lineups={lineups}
             gpResults={gpResults} sprintResults={sprintResults} pitResults={pitResults} rules={rules} />
             : <Card title="Risultati"><p>Il calendario non è ancora disponibile.</p></Card>)}
+
+          {tab === 'analytics' && managerData && <><LeagueDashboard entries={standings} leagueId={selected.id} />
+            <AdvancedDashboard data={buildAdvancedStats({ entries: standings, races, lineups, gpResults, sprintResults, pitResults, rules })} drivers={drivers} /></>}
 
           {tab === 'manage' && isAdmin && <>
             <div>
