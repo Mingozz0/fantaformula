@@ -5,26 +5,27 @@ import { ArrowRight, Flag, Trophy, Users } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { toast } from 'sonner';
 
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!email || !password) {
-      setError('Inserisci email e password per proseguire.');
+      toast.error('Inserisci email e password per proseguire.');
       return;
     }
     setLoading(true);
     try {
       const { error: authError } = await createClient().auth.signInWithPassword({ email, password });
-      if (authError) { setError('Accesso non riuscito. Controlla email, password e conferma dell’account.'); return; }
+      if (authError) { toast.error('Accesso non riuscito. Controlla email, password e conferma dell’account.'); return; }
+      toast.success('Accesso effettuato.');
       router.replace('/home');
-    } catch { setError('Connessione non disponibile. Riprova tra poco.'); }
+    } catch { toast.error('Connessione non disponibile. Riprova tra poco.'); }
     finally { setLoading(false); }
   }
 
@@ -55,12 +56,11 @@ export default function LoginPage() {
             <p className="mt-2 text-zinc-400">Accedi con il tuo account GRIDF1.</p>
             <form className="mt-9 space-y-5" onSubmit={submit} noValidate>
               <label className="block text-sm font-medium text-zinc-300">Email
-                <input value={email} onChange={(event) => { setEmail(event.target.value); setError(''); }} type="email" className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3.5 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30" placeholder="nome@email.it" />
+                <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3.5 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30" placeholder="nome@email.it" />
               </label>
               <label className="block text-sm font-medium text-zinc-300">Password
-                <input value={password} onChange={(event) => { setPassword(event.target.value); setError(''); }} type="password" className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3.5 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30" placeholder="••••••••" />
+                <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" className="mt-2 w-full rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3.5 outline-none transition focus:border-red-500 focus:ring-2 focus:ring-red-500/30" placeholder="••••••••" />
               </label>
-              {error && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
               <button disabled={loading} className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3.5 font-bold transition hover:bg-red-500 disabled:opacity-60">{loading ? 'Accesso in corso…' : 'Entra nella griglia'} <ArrowRight size={18} /></button>
             </form>
             <p className="mt-7 text-center text-sm text-zinc-400">Non hai un account? <Link className="font-bold text-red-400 hover:text-red-300" href="/register">Registrati</Link></p>

@@ -25,10 +25,18 @@ export type DriverResult = {
 };
 
 export type FantasyLineup = {
-  driver_one_id: number;
-  driver_two_id: number;
-  reserve_driver_id: number;
+  driver_one_id: number | null;
+  driver_two_id: number | null;
+  reserve_driver_id: number | null;
+  is_empty?: boolean;
 };
+
+export function hasSubmittedLineup(lineup: FantasyLineup | null | undefined): lineup is FantasyLineup & {
+  driver_one_id: number; driver_two_id: number; reserve_driver_id: number;
+} {
+  return Boolean(lineup && !lineup.is_empty && lineup.driver_one_id && lineup.driver_two_id && lineup.reserve_driver_id
+    && new Set([lineup.driver_one_id, lineup.driver_two_id, lineup.reserve_driver_id]).size === 3);
+}
 
 export type EventScore = {
   driverIds: number[];
@@ -90,7 +98,7 @@ export function scoreEvent(
   sprint: boolean,
   fastestPitConstructorId: number | null = null,
 ): EventScore {
-  if (!lineup || constructorId === null) {
+  if (!hasSubmittedLineup(lineup) || constructorId === null) {
     return { driverIds: [], driverScores: [], constructorScore: 0, total: 0, reserveUsed: false };
   }
   const byDriver = new Map(results.map((result) => [result.driver_id, result]));

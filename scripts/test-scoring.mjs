@@ -70,6 +70,16 @@ const bothAbsent = scoreEvent(lineup, 1, [
 assert.deepEqual(bothAbsent.driverIds, [3, 2]);
 assert.deepEqual(bothAbsent.driverScores, [8, 0]);
 assert.equal(scoreEvent(null, 1, [], rules, false).total, 0);
+for (const sprint of [false, true]) {
+  const empty = { driver_one_id: null, driver_two_id: null, reserve_driver_id: null, is_empty: true };
+  const winners = [result(1, 1, 1, { fastest_lap: true }), result(2, 2, 2)];
+  assert.ok(scoreEvent(lineup, 1, winners, rules, sprint, 1).total > 0);
+  assert.deepEqual(scoreEvent(empty, 1, winners, rules, sprint, 1), {
+    driverIds: [], driverScores: [], constructorScore: 0, total: 0, reserveUsed: false,
+  });
+  assert.equal(scoreEvent({ ...lineup, is_empty: true }, 1, winners, rules, sprint, 1).total, 0);
+  assert.equal(scoreEvent({ ...lineup, driver_two_id: null }, 1, winners, rules, sprint, 1).total, 0);
+}
 const explained = explainDriverScore(result(1, 3, 1, { fastest_lap: true, driver_of_the_day: true }), rules, false);
 assert.equal(explained.total, 42);
 assert.deepEqual(explained.components.map((component) => component.points), [25, 3, 4, 5, 5]);

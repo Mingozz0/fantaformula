@@ -5,36 +5,37 @@ import { Flag, UserPlus } from 'lucide-react';
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { toast } from 'sonner';
 
 export default function RegisterPage() {
   const router = useRouter();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const [loading, setLoading] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (name.trim().length < 2 || !email || password.length < 6) {
-      setError('Inserisci un nome di almeno 2 caratteri e una password di almeno 6.');
+      toast.error('Inserisci un nome di almeno 2 caratteri e una password di almeno 6.');
       return;
     }
     setLoading(true);
-    const { data, error: authError } = await createClient().auth.signUp({
-      email, password,
-      options: {
-        data: { display_name: name.trim() },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-    if (authError) { setLoading(false); setError(authError.message); return; }
-    if (!data.session) {
-      setLoading(false);
-      setNotice('Controlla la tua email e conferma l’account, poi accedi.');
-      return;
-    }
-    router.replace('/home');
+    try {
+      const { data, error: authError } = await createClient().auth.signUp({
+        email, password,
+        options: {
+          data: { display_name: name.trim() },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (authError) { toast.error(authError.message); return; }
+      if (!data.session) {
+        toast.success('Controlla la tua email e conferma l’account, poi accedi.', { duration: 10000 });
+        return;
+      }
+      toast.success('Account creato.'); router.replace('/home');
+    } catch { toast.error('Connessione non disponibile. Riprova tra poco.'); }
+    finally { setLoading(false); }
   }
   return <main className="grid min-h-screen place-items-center bg-[#0d0d0f] p-6 text-white">
     <div className="w-full max-w-md rounded-3xl border border-zinc-800 bg-zinc-950 p-8 shadow-2xl">
@@ -44,8 +45,6 @@ export default function RegisterPage() {
         <Field label="Nome completo" value={name} setValue={setName} placeholder="Mario Rossi" />
         <Field label="Email" value={email} setValue={setEmail} type="email" placeholder="nome@email.it" />
         <Field label="Password" value={password} setValue={setPassword} type="password" placeholder="Almeno 6 caratteri" />
-        {error && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
-        {notice && <p role="status" className="rounded-lg bg-emerald-500/10 p-3 text-sm text-emerald-300">{notice}</p>}
         <button disabled={loading} className="w-full rounded-xl bg-red-600 py-3.5 font-bold hover:bg-red-500 disabled:opacity-60">{loading ? 'Registrazione in corso…' : 'Crea account'}</button>
       </form>
       <p className="mt-7 text-center text-sm text-zinc-400">Hai già un account? <Link href="/" className="font-bold text-red-400">Accedi</Link></p>

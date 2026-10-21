@@ -27,6 +27,9 @@ assert.equal(countdownParts(null,0),null);
 assert.match(sessionTime('2026-10-25T20:00:00Z'),/21:00/); // Italian winter time.
 const names=(id)=>`Pilota ${id}`,constructors=(id)=>`Scuderia ${id}`;
 assert.deepEqual(auditChanges('lineup',{driver_one_id:1},{driver_one_id:2},names,constructors),[{label:'Titolare 1',before:'Pilota 1',after:'Pilota 2'}]);
+const absentChanges=auditChanges('lineup',{driver_one_id:1,driver_two_id:2,reserve_driver_id:3},{is_empty:true,driver_one_id:null,driver_two_id:null,reserve_driver_id:null},names,constructors);
+assert.deepEqual(absentChanges[0],{label:'Formazione non consegnata',before:'No',after:'Sì'});
+assert.deepEqual(absentChanges[1],{label:'Titolare 1',before:'Pilota 1',after:'—'});
 assert.equal(auditChanges('published',{drivers:[{driver_id:1,result_status:'finished'}]},{drivers:[{driver_id:1,result_status:'dns'}]},names,constructors)[0].after,'Non partito');
 assert.equal(auditChanges('draft_saved',{drivers:[{driver_id:1,grid_position:1}]},{drivers:[{driver_id:1,grid_position:1}]},names,constructors).length,0);
 assert.equal(auditChanges('schedule_updated',null,{session_key:'race',starts_at:'2026-10-25T20:00:00Z'},names,constructors)[0].label,'Gran Premio');

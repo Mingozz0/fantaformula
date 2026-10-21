@@ -1,4 +1,4 @@
-import { scoreEvent, type DriverResult, type FantasyLineup, type ScoringRules } from './scoring';
+import { hasSubmittedLineup, scoreEvent, type DriverResult, type FantasyLineup, type ScoringRules } from './scoring';
 import type { StatsRace, StatsTeam, TeamStats } from './league-stats';
 export function buildAdvancedStats({ entries, races, lineups, gpResults, sprintResults, pitResults, rules }: {
   entries: TeamStats[]; races: StatsRace[]; lineups: (FantasyLineup & { fantasy_team_id:string; race_id:number })[];
@@ -10,7 +10,7 @@ export function buildAdvancedStats({ entries, races, lineups, gpResults, sprintR
     let missed = 0;
     for (const race of races) {
       const lineup = lineups.find((row) => row.race_id===race.id && row.fantasy_team_id===entry.team.id);
-      if (!lineup || !rules) continue;
+      if (!hasSubmittedLineup(lineup) || !rules) continue;
       const pit = pitResults.find((row) => row.race_id===race.id && row.fastest_pit_stop)?.constructor_id ?? null;
       for (const sprint of [false,true]) {
         if (sprint ? !race.has_sprint || !race.sprint_published : !race.gp_published) continue;

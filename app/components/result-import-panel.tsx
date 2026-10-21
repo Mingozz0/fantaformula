@@ -5,6 +5,7 @@ import { AlertTriangle, Download, LoaderCircle, X } from 'lucide-react';
 import { previewResultImport } from '@/app/manager/import-actions';
 import { driverStatusLabel } from '@/lib/labels';
 import type { ResultImport } from '@/lib/result-import';
+import { toast } from 'sonner';
 
 export function ResultImportPanel({ raceId, event, drivers, disabled, onApply }: {
   raceId: number; event: 'gp' | 'sprint'; drivers: { id: number; name: string }[];
@@ -12,16 +13,15 @@ export function ResultImportPanel({ raceId, event, drivers, disabled, onApply }:
 }) {
   const [pending, startImport] = useTransition();
   const [preview, setPreview] = useState<ResultImport | null>(null);
-  const [error, setError] = useState('');
   const name = (id: number) => drivers.find((driver) => driver.id === id)?.name ?? `Pilota ${id}`;
   function load() {
-    setError(''); setPreview(null);
+    setPreview(null);
     startImport(async () => {
       try {
         const reply = await previewResultImport(raceId, event);
         if (reply.ok) setPreview(reply.result);
-        else setError(reply.error);
-      } catch { setError('Importazione non riuscita. La bozza è conservata: riprova.'); }
+        else toast.error(reply.error);
+      } catch { toast.error('Importazione non riuscita. La bozza è conservata: riprova.'); }
     });
   }
   return <section aria-label="Importazione risultati" className="space-y-4 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
@@ -31,7 +31,6 @@ export function ResultImportPanel({ raceId, event, drivers, disabled, onApply }:
         {pending ? <LoaderCircle aria-hidden className="size-4 animate-spin" /> : <Download aria-hidden className="size-4" />}{pending ? 'Recupero risultati…' : 'Importa risultati'}
       </button>
     </div>
-    {error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
     {preview && <div className="space-y-4" aria-live="polite">
       <div className="flex items-center justify-between gap-3"><h4 className="text-sm font-bold">Anteprima · {preview.drivers.length} di {drivers.length} piloti associati</h4>
         <button type="button" onClick={() => setPreview(null)} aria-label="Chiudi anteprima" className="grid size-11 shrink-0 place-items-center rounded-lg hover:bg-zinc-200"><X aria-hidden className="size-4" /></button></div>

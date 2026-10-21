@@ -1,4 +1,4 @@
-import { scoreEvent, type DriverResult, type FantasyLineup, type ScoringRules } from './scoring';
+import { hasSubmittedLineup, scoreEvent, type DriverResult, type FantasyLineup, type ScoringRules } from './scoring';
 
 export type StatsTeam = { id: string; user_id: string; name: string; constructor_id: number;
   driver_one_id: number; driver_two_id: number; driver_three_id: number };
@@ -28,7 +28,7 @@ export function buildLeagueStats({ teams, races, lineups, gpResults, sprintResul
       return { race, gp: gp?.total ?? null, sprint: sprint?.total ?? null, total, cumulative,
         driverPoints: [...(gp?.driverScores ?? []), ...(sprint?.driverScores ?? [])].reduce((sum, value) => sum + value, 0),
         constructorPoints: (gp?.constructorScore ?? 0) + (sprint?.constructorScore ?? 0),
-        reserveUses: Number(Boolean(gp?.reserveUsed)) + Number(Boolean(sprint?.reserveUsed)), hasLineup: Boolean(lineup),
+        reserveUses: Number(Boolean(gp?.reserveUsed)) + Number(Boolean(sprint?.reserveUsed)), hasLineup: hasSubmittedLineup(lineup),
         complete: race.gp_published && (!race.has_sprint || race.sprint_published) };
     });
     const best = results.filter((row) => row.hasLineup).reduce<RacePoints | null>((record, row) => !record || row.total > record.total ? row : record, null);

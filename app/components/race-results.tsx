@@ -3,7 +3,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { driverStatusLabel, signedPoints } from '@/lib/labels';
-import { explainConstructorScore, explainDriverScore, scoreEvent,
+import { explainConstructorScore, explainDriverScore, hasSubmittedLineup, scoreEvent,
   type DriverResult, type FantasyLineup, type ScoreBreakdown, type ScoringRules } from '@/lib/scoring';
 import { RacePicker } from './race-picker';
 
@@ -73,7 +73,8 @@ export function RaceResults({ race, races, leagueId, teams, drivers, constructor
     ...(race.has_sprint ? [{ key: 'sprint', label: 'Gara Sprint', published: race.sprint_published, results: sprint, sprint: true }] : []),
   ];
   const entries = teams.map((team) => {
-    const lineup = lineups.find((entry) => entry.fantasy_team_id === team.id && entry.race_id === race.id) ?? null;
+    const saved = lineups.find((entry) => entry.fantasy_team_id === team.id && entry.race_id === race.id);
+    const lineup = hasSubmittedLineup(saved) ? saved : null;
     const scores = events.map((event) => event.published && rules
       ? scoreEvent(lineup, team.constructor_id, event.results, rules, event.sprint, pit) : null);
     return { team, lineup, scores, total: scores.reduce((sum, score) => sum + (score?.total ?? 0), 0) };

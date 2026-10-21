@@ -80,7 +80,6 @@ export default async function ManagerPage({ searchParams }: {
     <div><p className="text-xs font-bold uppercase tracking-widest text-red-600">Gestore del gioco</p>
       <h1 className="mt-2 text-3xl font-black sm:text-4xl">Risultati 2026</h1>
     </div>
-    {params.message && <p role="status" className="mt-6 rounded-xl bg-amber-100 p-4 text-sm text-amber-950">{params.message}</p>}
     {selected && <><RacePicker races={races} value={selected.id} href={managerUrl(undefined, event)} />
       <section className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-4 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-black">Programma del weekend</h2><ScheduleSync raceId={selected.id} /></div>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{((sessionsData??[]) as RaceSession[]).map((session)=><div key={session.session_key} className="rounded-xl bg-zinc-50 p-3"><p className="text-xs font-bold">{sessionLabels[session.session_key]}</p><p className="mt-1 text-xs text-zinc-500">{sessionTime(session.starts_at)}</p></div>)}</div>

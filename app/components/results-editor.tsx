@@ -9,6 +9,7 @@ import { DriverResultFields, type EditableDriverResult } from './driver-result-f
 import { FormSelect } from './form-select';
 import { ResultImportPanel } from './result-import-panel';
 import { mergeResultImport, type ResultImport } from '@/lib/result-import';
+import { toast } from 'sonner';
 
 type EditorDriver = { id: number; name: string; constructorId: number };
 export type EditorResult = EditableDriverResult & { driver_id: number; fastest_lap: boolean; driver_of_the_day?: boolean };
@@ -34,8 +35,6 @@ export function ResultsEditor({ raceId, event, userId, drivers, constructors, re
   const dirty = signature !== savedSignature;
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
-  const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
   const [savedAt, setSavedAt] = useState(draft?.updated_at ?? '');
   const [publishedVersion, setPublishedVersion] = useState(draft?.published_version ?? 0);
   const [publicationAttempt, setPublicationAttempt] = useState(false);
@@ -44,7 +43,7 @@ export function ResultsEditor({ raceId, event, userId, drivers, constructors, re
   const initialVersion = draft?.version ?? 0;
 
   function update(next: DraftPayload) {
-    current.current = next; setPayload(next); setError(''); setNotice('');
+    current.current = next; setPayload(next);
     try { sessionStorage.setItem(storageKey, JSON.stringify({ version: version.current, payload: next })); } catch { /* Server save remains available. */ }
   }
   useEffect(() => {
@@ -53,12 +52,13 @@ export function ResultsEditor({ raceId, event, userId, drivers, constructors, re
       if (cached && cached.version === initialVersion && isDraftPayload(cached.payload)
         && cached.payload.drivers.length === drivers.length && drivers.every((driver) => cached.payload.drivers.some((row: DraftPayload['drivers'][number]) => row.driver_id === driver.id))) {
         current.current = cached.payload;
-        startTransition(() => { setPayload(cached.payload); setNotice('Bozza locale recuperata.'); });
+        startTransition(() => { setPayload(cached.payload); });
+        toast.info('Bozza locale recuperata.', { id: storageKey });
       }
     } catch { /* An unavailable local cache never blocks the editor. */ }
   }, [storageKey, initialVersion, drivers]);
 
-  const save = useCallback((snapshot: DraftPayload): Promise<DraftReply> => {
+  const save = useCallback((snapshot: DraftPayload, successMessage?: string): Promise<DraftReply> => {
     const request = queue.current.then(async () => {
       setSaving(true);
       let reply: DraftReply;
@@ -66,12 +66,14 @@ export function ResultsEditor({ raceId, event, userId, drivers, constructors, re
       catch { reply = { ok: false, error: 'Connessione interrotta. La bozza locale è conservata: riprova.' }; }
       if (reply.ok) {
         version.current = reply.version; setSavedVersion(reply.version); setSavedSignature(JSON.stringify(snapshot)); setSavedAt(reply.savedAt ?? '');
-        setPublishedVersion(reply.publishedVersion ?? 0); setError(''); setNotice('');
+        setPublishedVersion(reply.publishedVersion ?? 0);
+        toast.dismiss(`save-error:${storageKey}`);
+        if (successMessage) toast.success(successMessage);
         try {
           if (JSON.stringify(current.current) === JSON.stringify(snapshot)) sessionStorage.removeItem(storageKey);
           else sessionStorage.setItem(storageKey, JSON.stringify({ version: reply.version, payload: current.current }));
         } catch { /* The database already holds this snapshot. */ }
-      } else setError(reply.error);
+      } else toast.error(reply.error, { id: `save-error:${storageKey}` });
       setSaving(false); return reply;
     });
     queue.current = request; return request;
@@ -95,16 +97,16 @@ export function ResultsEditor({ raceId, event, userId, drivers, constructors, re
     setPublicationAttempt(true);
     const incomplete = validatePositions(rows);
     if (incomplete.length || !payload.fastest_driver_id || event === 'gp' && (!payload.dotd_driver_id || !payload.pit_constructor_id)) {
-      setError(incomplete[0]?.message ?? 'Seleziona i bonus della gara prima di pubblicare.'); return;
+      toast.error(incomplete[0]?.message ?? 'Seleziona i bonus della gara prima di pubblicare.'); return;
     }
-    setPublishing(true); setError('');
+    setPublishing(true);
     try {
       const saved = dirty || version.current === 0 ? await save(payload) : { ok: true, version: version.current };
       if (!saved.ok) return;
       const reply = await publishResultDraft(raceId, event, version.current);
-      if (!reply.ok) { setError(reply.error); return; }
-      setPublishedVersion(reply.publishedVersion ?? reply.version); setIsPublished(true); setNotice('Risultati pubblicati.'); router.refresh();
-    } catch { setError('Pubblicazione non riuscita. La bozza è conservata: riprova.'); }
+      if (!reply.ok) { toast.error(reply.error); return; }
+      setPublishedVersion(reply.publishedVersion ?? reply.version); setIsPublished(true); toast.success('Risultati pubblicati.'); router.refresh();
+    } catch { toast.error('Pubblicazione non riuscita. La bozza è conservata: riprova.'); }
     finally { setPublishing(false); }
   }
   const options = drivers.map((driver) => ({ value: driver.id, label: driver.name }));
@@ -116,9 +118,9 @@ export function ResultsEditor({ raceId, event, userId, drivers, constructors, re
   function applyImport(imported: ResultImport) {
     const next = mergeResultImport(current.current, imported);
     update(next); setPublicationAttempt(false);
-    void save(next);
+    void save(next, 'Risultati importati e salvati nella bozza.');
   }
-  return <form onSubmit={(event) => { event.preventDefault(); void save(payload); }} noValidate autoComplete="off" className="mt-6 space-y-6">
+  return <form onSubmit={(event) => { event.preventDefault(); void save(payload, 'Bozza salvata.'); }} noValidate autoComplete="off" className="mt-6 space-y-6">
     <ResultImportPanel raceId={raceId} event={event} drivers={drivers} disabled={saving || publishing} onApply={applyImport} />
     {payload.imported && <p className="text-xs text-zinc-500">Importato da <a href={payload.imported.url} target="_blank" rel="noreferrer" className="font-semibold underline underline-offset-2">Jolpica-F1</a> · {new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }).format(new Date(payload.imported.imported_at))}
       {missingImportFields.length > 0 && <span className="mt-1 block font-semibold text-amber-700">Da verificare: {missingImportFields.join(', ')}.</span>}</p>}
@@ -137,7 +139,7 @@ export function ResultsEditor({ raceId, event, userId, drivers, constructors, re
       errors={errors.filter((error) => error.driverId === driver.id)} />)}</div>
     </fieldset>
     <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-sm backdrop-blur-sm">
-      <p role={error ? 'alert' : 'status'} className={`w-full text-xs ${error ? 'text-red-700' : 'text-zinc-500'}`}>{error || notice || (saving ? 'Salvataggio bozza…' : dirty ? 'Modifiche da salvare' : savedAt ? `Bozza salvata · ${new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }).format(new Date(savedAt))}` : 'Nessuna bozza salvata')}</p>
+      <p role="status" className="w-full text-xs text-zinc-500">{saving ? 'Salvataggio bozza…' : dirty ? 'Modifiche da salvare' : savedAt ? `Bozza salvata · ${new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }).format(new Date(savedAt))}` : 'Nessuna bozza salvata'}</p>
       <button type="submit" disabled={saving || publishing || (!dirty && savedVersion > 0)} className="min-h-11 flex-1 rounded-xl border border-zinc-300 px-4 text-sm font-bold disabled:opacity-50">Salva bozza</button>
       <button type="button" onClick={() => void publish()} disabled={saving || publishing || alreadyPublished} className="min-h-11 flex-1 rounded-xl bg-red-600 px-4 text-sm font-bold text-white disabled:opacity-50">{publishing ? 'Pubblicazione…' : alreadyPublished ? 'Pubblicati' : 'Pubblica risultati'}</button>
     </div>

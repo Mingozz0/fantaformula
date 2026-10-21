@@ -38,6 +38,8 @@ for (const message of ['Formazione passata registrata', 'Formazione non valida',
   assert.equal(url.searchParams.get('tab'), 'lineup');
 }
 assert.equal(homeUrl(), '/home');
+assert.equal(new URL(homeUrl('league-1', 'lineup', 'Salvata', 4, 'success'), 'https://portal.test').searchParams.get('outcome'), 'success');
+assert.equal(new URL(homeUrl('league-1', 'lineup', 'Non valida', 4), 'https://portal.test').searchParams.get('outcome'), 'error');
 const { buildLeagueStats } = load('../lib/league-stats.ts');
 const rules = { gp_finish_points: [10, 6, 3], sprint_finish_points: [3, 2, 1], gp_grid_points: [], sprint_grid_points: [],
   gp_position_delta: 0, sprint_position_delta: 0, gp_fastest_lap: 0, sprint_fastest_lap: 0, driver_of_the_day: 0,
@@ -66,6 +68,14 @@ assert.equal(stats[2].wins, 0);
 assert.deepEqual(stats[0].races.map((row) => row.cumulative), [26, 34]);
 assert.equal(buildLeagueStats({ ...args, rules: null })[0].races.length, 0);
 assert.deepEqual(buildLeagueStats({ ...args, teams: [] }), []);
+const emptyStats = buildLeagueStats({ ...args, lineups: lineups.map((lineup) => lineup.fantasy_team_id === 't1'
+  ? { ...lineup, is_empty: true, driver_one_id: null, driver_two_id: null, reserve_driver_id: null } : lineup) });
+const absent = emptyStats.find((entry) => entry.team.id === 't1');
+assert.equal(absent.points, 0);
+assert.equal(absent.constructorPoints, 0);
+assert.equal(absent.missingLineups, 2);
+assert.equal(absent.wins, 0);
+assert.equal(absent.best, null);
 const tiedTeams = teams.slice(0, 2).map((team) => ({ ...team, constructor_id: 1 }));
 const tie = buildLeagueStats({ ...args, teams: tiedTeams, lineups: lineups.map((lineup) => ({ ...lineup, driver_one_id: 1, driver_two_id: 2, reserve_driver_id: 3 })) });
 assert.deepEqual(tie.map((entry) => entry.rank), [1, 1]);

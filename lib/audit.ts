@@ -20,7 +20,7 @@ export function auditChanges(kind:string,previous:Snapshot|null,current:Snapshot
     changes.push({label,before:show(field,before),after:show(field,after)});
   }
   if(kind==='lineup') {
-    for(const [field,label] of Object.entries({driver_one_id:'Titolare 1',driver_two_id:'Titolare 2',reserve_driver_id:'Riserva',constructor_id:'Scuderia',retroactive:'Recupero dopo scadenza'}))add(label,field,previous?.[field],current[field]);
+    for(const [field,label] of Object.entries({is_empty:'Formazione non consegnata',driver_one_id:'Titolare 1',driver_two_id:'Titolare 2',reserve_driver_id:'Riserva',constructor_id:'Scuderia',retroactive:'Recupero dopo scadenza'}))add(label,field,field==='is_empty'?(previous?.[field]??false):previous?.[field],field==='is_empty'?(current[field]??false):current[field]);
   }else if(kind==='schedule_updated') {
     add(current.session_key==='deadline'?'Scadenza formazione':sessionLabels[current.session_key as SessionKey]??'Sessione','starts_at',previous?.starts_at,current.starts_at);
   }else {

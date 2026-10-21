@@ -20,7 +20,7 @@ import { weekendRace, type WeekendRace, type RaceSession } from '@/lib/weekend';
 import { redirect } from 'next/navigation';
 import { cookies } from 'next/headers';
 import { createClient } from '@/lib/supabase/server';
-import { type DriverResult, type FantasyLineup, type ScoringRules } from '@/lib/scoring';
+import { hasSubmittedLineup, type DriverResult, type FantasyLineup, type ScoringRules } from '@/lib/scoring';
 import { activateLeague, assignTeamDraft, createLeague, deleteTeamDraft, joinLeague,
   saveLineup, saveTeam, saveTeamDraft } from './actions';
 
@@ -81,7 +81,6 @@ export default async function HomePage({ searchParams }: {
     assertQuery(profileResult, 'Impossibile caricare il profilo');
     const { data: profile } = profileResult;
     return <PortalShell defaultOpen={sidebarOpen} name={profile?.display_name ?? 'Il tuo account'} leagues={leagues} activeTab="home" isAdmin={false} isManager={Boolean(managerData)}>
-      {params.message && <p role="status" className="rounded-xl bg-amber-100 p-3 text-sm text-amber-950">{params.message}</p>}
       <LeagueEntrance leagues={memberships.map((membership) => ({ ...membership.leagues, role: membership.role }))}><LeagueForms /></LeagueEntrance>
     </PortalShell>;
   }
@@ -149,7 +148,7 @@ export default async function HomePage({ searchParams }: {
   const selectedTeam = params.team ? standings.find((entry) => entry.team.id === params.team) : standings.find((entry) => entry.team.id === myTeam?.id);
   const provisional = tab === 'standings' && races.some((race) => (race.gp_published || race.sprint_published)
     && ((race.has_sprint && !race.sprint_published) || !race.gp_published
-      || teams.some((team) => !lineups.some((lineup) => lineup.fantasy_team_id === team.id && lineup.race_id === race.id))));
+      || teams.some((team) => !lineups.some((lineup) => (lineup.is_empty || hasSubmittedLineup(lineup)) && lineup.fantasy_team_id === team.id && lineup.race_id === race.id))));
   const extras=await Promise.all([
     tab==='overview'&&weekend?supabase.from('race_sessions').select('*').eq('race_id',weekend.id):emptyRows,
     tab==='history'&&isAdmin&&weekend?supabase.from('lineup_audit').select('id,actor_id,changed_at,previous_value,current_value').eq('league_id',selected.id).eq('current_value->>race_id',String(weekend.id)).order('changed_at',{ascending:false}).order('id',{ascending:false}).limit(200):emptyRows,
@@ -170,7 +169,6 @@ export default async function HomePage({ searchParams }: {
   return <PortalShell defaultOpen={sidebarOpen} name={ownerName(userId)} leagues={leagues} selectedLeagueId={selected.id}
     activeTab={tab} pageTitle={tab === 'team' ? selectedTeam?.team.name : undefined} isAdmin={isAdmin} isManager={Boolean(managerData)}>
         <section className="min-w-0 space-y-6">
-          {params.message && <p role="status" className="rounded-xl bg-amber-100 p-3 text-sm font-medium text-amber-950">{params.message}</p>}
           <div><p className="text-xs font-bold uppercase tracking-widest text-red-600">Stagione 2026 · {leagueStatusLabel(selected.status)}</p>
             <h1 className="mt-1 break-words text-3xl font-black sm:text-4xl">{selected.name}</h1>
             <p className="mt-2 text-sm text-zinc-500 sm:text-base">{members.length} di 7 partecipanti · {isAdmin ? 'Amministratore' : 'Partecipante'}</p></div>
@@ -355,8 +353,8 @@ function LineupForm({ leagueId, race, team, lineup, driverName, constructorName 
     <input type="hidden" name="league_id" value={leagueId} />
     <input type="hidden" name="fantasy_team_id" value={team.id} />
     <input type="hidden" name="race_id" value={race.id} />
-    <LineupSelection key={`${race.id}-${team.id}-${lineup?.driver_one_id}-${lineup?.driver_two_id}`}
-      initialOne={lineup?.driver_one_id} initialTwo={lineup?.driver_two_id}
+    <LineupSelection key={`${race.id}-${team.id}-${lineup?.driver_one_id}-${lineup?.driver_two_id}-${lineup?.is_empty}`}
+      initialOne={lineup?.driver_one_id} initialTwo={lineup?.driver_two_id} initialEmpty={lineup?.is_empty}
       options={roster.map((id) => ({ value: id, label: driverName(id) }))} />
     {lineup && <p className="text-xs text-zinc-500 md:col-span-3">Ultimo salvataggio: {deadlineLabel(lineup.submitted_at)} · {lineup.retroactive ? 'recupero dell’amministratore' : 'partecipante'}.</p>}
   </form>;
