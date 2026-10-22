@@ -76,7 +76,7 @@ export default async function ManagerPage({ searchParams }: {
   const actors=actorIds.length?await supabase.from('profiles').select('id,display_name').in('id',actorIds):{data:[]};
   assertQuery(actors,'Impossibile caricare gli autori delle modifiche');
   const history:AuditEntry[]=(auditData??[]).map((row)=>({id:String(row.id),kind:row.kind,title:row.event==='calendar'?'Programma del weekend':`${selected?.name} · ${event==='gp'?'GP':'Sprint'}`,actor:row.kind==='baseline'?'Situazione iniziale':actors.data?.find((actor)=>actor.id===row.actor_id)?.display_name??'Database',changedAt:row.changed_at,version:row.version,changes:auditChanges(row.kind,row.previous_value,row.current_value,driverName,constructorName)}));
-  return <PortalShell defaultOpen={sidebarOpen} name={profile?.display_name ?? 'Il tuo account'} leagues={leagues} selectedLeagueId={league?.id} activeTab="manager" isAdmin={isAdmin} isManager>
+  return <PortalShell defaultOpen={sidebarOpen} name={profile?.display_name ?? 'Il tuo account'} leagues={leagues} selectedLeagueId={league?.id} activeTab="manager" raceId={selected?.id} isAdmin={isAdmin} isManager>
     <div><p className="text-xs font-bold uppercase tracking-widest text-red-600">Gestore del gioco</p>
       <h1 className="mt-2 text-3xl font-black sm:text-4xl">Risultati 2026</h1>
     </div>

@@ -91,7 +91,7 @@ assert.deepEqual(chartSeries(stats,'sprint','round')[0].rows.map((row)=>row.valu
 assert.deepEqual(chartSeries(stats,'all','position')[1].rows.map((row)=>row.value),[2,2]);
 const { buildAdvancedStats } = load('../lib/advanced-stats.ts');
 const advanced=buildAdvancedStats({...args,entries:stats});
-assert.equal(advanced.teams.find((team)=>team.id==='t2').missed,9);
+assert.equal(advanced.teams.find((team)=>team.id==='t2').missed,7); // Complete weekends only; an unfinished Sprint weekend is provisional.
 assert.equal(advanced.teams.find((team)=>team.id==='t3').missing,2);
 assert.equal(advanced.drivers.reduce((sum,driver)=>sum+driver.points,0),stats.reduce((sum,entry)=>sum+entry.driverPoints,0));
 const { isDraftPayload }=load('../lib/result-draft.ts');

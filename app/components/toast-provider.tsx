@@ -1,11 +1,13 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { Toaster, toast } from 'sonner';
 
 export function ToastProvider() {
   const params = useSearchParams();
+  const pathname = usePathname();
+  const hasMobileNav = pathname === '/manager' || pathname === '/home' && params.has('league');
   useEffect(() => {
     const url = new URL(window.location.href);
     const message = url.searchParams.get('message');
@@ -20,5 +22,5 @@ export function ToastProvider() {
   }, [params]);
   return <Toaster position="bottom-right" richColors closeButton duration={5000} theme="light"
     containerAriaLabel="Messaggi" toastOptions={{ closeButtonAriaLabel: 'Chiudi messaggio' }}
-    mobileOffset={{ bottom: 'max(16px, env(safe-area-inset-bottom))', left: 16, right: 16 }} />;
+    mobileOffset={{ bottom: hasMobileNav ? 'calc(5rem + env(safe-area-inset-bottom))' : 'max(16px, env(safe-area-inset-bottom))', left: 16, right: 16 }} />;
 }

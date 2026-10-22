@@ -21,7 +21,7 @@ function Stat({ label, value, detail, icon }: { label: string; value: string; de
   </div>;
 }
 
-export function LeagueDashboard({ entries, leagueId }: { entries: TeamStats[]; leagueId: string }) {
+export function LeagueDashboard({ entries, leagueId, compact = false }: { entries: TeamStats[]; leagueId: string; compact?: boolean }) {
   const leader = entries[0];
   const leaders = entries.filter((entry) => entry.points === leader?.points);
   const records = entries.flatMap((entry) => entry.best ? [{ entry, row: entry.best }] : []).sort((a, b) => b.row.total - a.row.total);
@@ -39,16 +39,15 @@ export function LeagueDashboard({ entries, leagueId }: { entries: TeamStats[]; l
       <Stat label="Più tappe vinte" value={wins ? String(wins) : '—'} detail={wins ? winners.map((entry) => entry.team.name).join(' · ') : undefined} icon={<Flag className="size-3.5" />} />
       <Stat label="Tappe a punteggio" value={String(played)} detail={`${entries.length} squadre`} icon={<Users className="size-3.5" />} />
     </div>
-    <Panel title="Corsa al titolo"><InteractivePointsChart entries={entries} />
-    </Panel>
-    <div className="grid gap-5 lg:grid-cols-2">
-      <Panel title="Punti totali" action={<NavigationLink href={`/home?league=${leagueId}&tab=standings`} className="text-xs font-bold text-red-600">Classifica<ArrowUpRight className="size-3.5" /></NavigationLink>}>
+    {!compact&&<Panel title="Corsa al titolo"><InteractivePointsChart entries={entries} /></Panel>}
+    <div className={`grid gap-5 ${compact?'':'lg:grid-cols-2'}`}>
+      {!compact&&<Panel title="Punti totali" action={<NavigationLink href={`/home?league=${leagueId}&tab=standings`} className="text-xs font-bold text-red-600">Classifica<ArrowUpRight className="size-3.5" /></NavigationLink>}>
         <div className="space-y-4">{entries.map((entry, index) => <div key={entry.team.id}>
           <div className="mb-1.5 flex items-center justify-between gap-3 text-sm"><NavigationLink href={teamUrl(leagueId, entry.team.id)} className="min-w-0 break-words font-semibold hover:text-red-600">{entry.team.name}</NavigationLink><span className="shrink-0 font-black tabular-nums">{number(entry.points)} pt</span></div>
           <div className="h-1.5 overflow-hidden rounded-full bg-zinc-100"><div className="h-full rounded-full" style={{ width: `${Math.abs(entry.points) / Math.max(1, ...entries.map((entry) => Math.abs(entry.points))) * 100}%`, backgroundColor: colors[index % colors.length] }} /></div>
         </div>)}</div>
         {!entries.length && <p className="text-sm text-zinc-400">Nessuna squadra</p>}
-      </Panel>
+      </Panel>}
       <Panel title={latest ? `Ultima tappa · ${latest.name}` : 'Ultima tappa'}>
         <div className="divide-y divide-zinc-100">{latestOrder.map(({ entry, row }) => <div key={entry.team.id} className="flex items-center justify-between gap-3 py-3 first:pt-0">
           <NavigationLink href={teamUrl(leagueId, entry.team.id)} className="min-w-0 break-words text-sm font-semibold hover:text-red-600">{entry.team.name}</NavigationLink>
@@ -60,8 +59,8 @@ export function LeagueDashboard({ entries, leagueId }: { entries: TeamStats[]; l
   </div>;
 }
 
-export function TeamDashboard({ entry, leagueId, owner, roster, constructor, leaderPoints }: {
-  entry: TeamStats; leagueId: string; owner: string; roster: string[]; constructor: string; leaderPoints: number;
+export function TeamDashboard({ entry, leagueId, owner, roster, constructor, leaderPoints, rankDelta, gapToNext }: {
+  entry: TeamStats; leagueId: string; owner: string; roster: string[]; constructor: string; leaderPoints: number; rankDelta?:number|null; gapToNext?:number;
 }) {
   const played = entry.races.length;
   return <div className="space-y-5">
@@ -69,6 +68,7 @@ export function TeamDashboard({ entry, leagueId, owner, roster, constructor, lea
     <div className="rounded-2xl bg-zinc-950 p-5 text-white sm:p-7"><p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">{owner}</p><h2 className="mt-2 break-words text-3xl font-black">{entry.team.name}</h2>
       <div className="mt-5 flex flex-wrap items-end gap-6"><p className="text-4xl font-black tabular-nums">{number(entry.points)} <span className="text-sm font-medium text-zinc-400">punti</span></p>
         <p className="pb-1 text-sm font-semibold text-zinc-300">{entry.rank}º in classifica{entry.rank > 1 ? ` · ${number(leaderPoints - entry.points)} pt dalla vetta` : ''}</p></div>
+      <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-zinc-300">{rankDelta!==null&&rankDelta!==undefined&&<span>{rankDelta>0?'↑':rankDelta<0?'↓':'—'} {rankDelta===0?'Posizione invariata':`${Math.abs(rankDelta)} ${Math.abs(rankDelta)===1?`posizione ${rankDelta>0?'guadagnata':'persa'}`:`posizioni ${rankDelta>0?'guadagnate':'perse'}`}`}</span>}{entry.races.length>0&&<span>Ultima tappa: <b className="text-white">{number(entry.races.at(-1)!.total)} pt</b></span>}{entry.rank>1&&gapToNext!==undefined&&<span>{number(gapToNext)} pt da chi precede</span>}</div>
     </div>
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       <Stat label="Media per tappa" value={played ? `${number(entry.average)} pt` : '—'} />
@@ -85,6 +85,7 @@ export function TeamDashboard({ entry, leagueId, owner, roster, constructor, lea
         ['Piloti', `${number(entry.driverPoints)} pt`], ['Scuderia', `${number(entry.constructorPoints)} pt`], ['Riserve subentrate', String(entry.reserveUses)],
       ].map(([label, value]) => <div key={label} className="flex justify-between gap-3 py-3 first:pt-0"><dt className="text-sm text-zinc-500">{label}</dt><dd className="text-sm font-bold tabular-nums">{value}</dd></div>)}</dl></Panel>
     </div>
+    <NavigationLink href={`/home?${new URLSearchParams({league:leagueId,tab:'analytics',team:entry.team.id})}`} className="min-h-11 py-3 text-sm font-bold text-red-600">Statistiche e confronti della squadra<ArrowUpRight className="size-3.5"/></NavigationLink>
     <Panel title="Gara per gara"><div className="divide-y divide-zinc-100">{entry.races.toReversed().map((row) => <div key={row.race.id} className="flex items-center justify-between gap-3 py-4 first:pt-0">
       <div className="min-w-0"><NavigationLink href={`/home?league=${leagueId}&tab=results&race=${row.race.id}`} className="text-sm font-bold hover:text-red-600">{row.race.round}. {row.race.name}<ArrowUpRight className="size-3.5 shrink-0" /></NavigationLink>
         <p className="mt-1 text-xs text-zinc-500">GP {row.gp === null ? '—' : number(row.gp)}{row.race.has_sprint && ` · Sprint ${row.sprint === null ? '—' : number(row.sprint)}`}{!row.hasLineup ? ' · Formazione assente' : ''}{!row.complete ? ' · Provvisorio' : ''}</p></div>

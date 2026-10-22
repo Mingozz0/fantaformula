@@ -11,6 +11,11 @@ import { buildLeagueStats } from '@/lib/league-stats';
 import { assertQuery } from '@/lib/query-errors';
 import { AdvancedDashboard } from '@/app/components/advanced-dashboard';
 import { buildAdvancedStats } from '@/lib/advanced-stats';
+import { standingsDetails } from '@/lib/standings';
+import { LeagueLineups } from '@/app/components/league-lineups';
+import { StandingsBoard } from '@/app/components/standings-board';
+import { DeadlineRefresh } from '@/app/components/deadline-refresh';
+import { lineupClosed, type SubmissionStatus } from '@/lib/lineup-visibility';
 import { WeekendCenter } from '@/app/components/weekend-center';
 import { LineupSummary } from '@/app/components/lineup-summary';
 import { LineupDeadline } from '@/app/components/lineup-deadline';
@@ -57,7 +62,7 @@ function url(leagueId: string, tab: string, raceId?: number) {
 async function currentTime() { return Date.now(); }
 
 export default async function HomePage({ searchParams }: {
-  searchParams: Promise<{ league?: string; tab?: string; race?: string; team?: string; message?: string }>;
+  searchParams: Promise<{ league?: string; tab?: string; race?: string; team?: string; message?: string; delivery?: string }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
@@ -74,7 +79,7 @@ export default async function HomePage({ searchParams }: {
   const memberships = (membershipsData ?? []) as unknown as Membership[];
   const leagues = memberships.map((membership) => membership.leagues);
   const selected = leagues.find((league) => league.id === params.league);
-  const tab = ['overview', 'team', 'lineup', 'standings', 'results', 'manage', 'analytics', 'history'].includes(params.tab ?? '')
+  const tab = ['overview', 'team', 'lineup', 'lineups', 'standings', 'results', 'manage', 'analytics', 'history'].includes(params.tab ?? '')
     ? params.tab! : 'overview';
   if (!selected) {
     const profileResult = await supabase.from('profiles').select('display_name').eq('id', userId).maybeSingle();
@@ -90,9 +95,9 @@ export default async function HomePage({ searchParams }: {
   if (tab === 'manage' && !isAdmin) redirect(url(selected.id, 'overview'));
   if (tab === 'history' && !isAdmin && !managerData) redirect(url(selected.id, 'overview'));
   const needsStats = ['overview', 'team', 'standings', 'analytics'].includes(tab);
-  const needsScores = needsStats || tab === 'results';
-  const needsDrivers = ['overview', 'team', 'lineup', 'results', 'manage', 'analytics', 'history'].includes(tab);
-  const needsConstructors = ['overview', 'team', 'lineup', 'results', 'manage', 'history'].includes(tab);
+  const needsScores = needsStats || tab === 'results' || tab === 'lineups';
+  const needsDrivers = ['overview', 'team', 'lineup', 'lineups', 'results', 'manage', 'analytics', 'history'].includes(tab);
+  const needsConstructors = ['overview', 'team', 'lineup', 'lineups', 'results', 'manage', 'analytics', 'history'].includes(tab);
   const needsRaces = needsScores || tab === 'lineup' || tab === 'history';
   const emptyRows = { data: [] };
   const leagueData = await Promise.all([
@@ -110,11 +115,12 @@ export default async function HomePage({ searchParams }: {
     needsScores ? supabase.from('sprint_driver_results').select('*').eq('season_id', selected.season_id) : emptyRows,
     needsScores ? supabase.from('race_constructor_results').select('*').eq('season_id', selected.season_id) : emptyRows,
     isAdmin && tab === 'manage' ? supabase.from('team_drafts').select('*').eq('league_id', selected.id).order('created_at') : emptyRows,
+    ['overview','lineup','lineups'].includes(tab) ? supabase.from('lineup_submissions').select('fantasy_team_id,race_id,is_submitted').eq('league_id',selected.id) : emptyRows,
   ]);
   leagueData.forEach((result) => assertQuery(result, 'Impossibile caricare i dati della lega'));
   const [{ data: membersData }, { data: teamsData }, { data: seasonDriversData },
     { data: constructorsData }, { data: racesData }, { data: rulesData },
-    { data: lineupsData }, { data: gpData }, { data: sprintData }, { data: pitData }, { data: draftsData }] = leagueData;
+    { data: lineupsData }, { data: gpData }, { data: sprintData }, { data: pitData }, { data: draftsData }, { data: submissionsData }] = leagueData;
   const members = (membersData ?? []) as Member[];
   const teams = (teamsData ?? []) as Team[];
   const constructorRows = constructorsData ?? [];
@@ -127,6 +133,7 @@ export default async function HomePage({ searchParams }: {
   const drivers = ((seasonDriversData ?? []) as unknown as SeasonDriver[]).map((row) => row.drivers);
   const rosterDrivers = ((seasonDriversData ?? []) as unknown as SeasonDriver[]).filter((row) => !row.is_replacement).map((row) => row.drivers);
   const lineups = (lineupsData ?? []) as Lineup[];
+  const submissions = (submissionsData ?? []) as SubmissionStatus[];
   const gpResults = (gpData ?? []) as RaceResult[];
   const sprintResults = (sprintData ?? []) as RaceResult[];
   const pitResults = (pitData ?? []) as Pit[];
@@ -145,6 +152,7 @@ export default async function HomePage({ searchParams }: {
   const raceForResults = races.find((race) => race.id === Number(params.race))
     ?? races.filter((race) => race.gp_published || race.sprint_published).at(-1) ?? races[0];
   const standings = needsStats ? buildLeagueStats({ teams, races, lineups, gpResults, sprintResults, pitResults, rules }) : [];
+  const standingRows = standingsDetails(standings);
   const selectedTeam = params.team ? standings.find((entry) => entry.team.id === params.team) : standings.find((entry) => entry.team.id === myTeam?.id);
   const provisional = tab === 'standings' && races.some((race) => (race.gp_published || race.sprint_published)
     && ((race.has_sprint && !race.sprint_published) || !race.gp_published
@@ -167,7 +175,7 @@ export default async function HomePage({ searchParams }: {
       changes:auditChanges(row.kind,row.previous_value,row.current_value,driverName,constructorName)}))].sort((a,b)=>Date.parse(b.changedAt)-Date.parse(a.changedAt));
 
   return <PortalShell defaultOpen={sidebarOpen} name={ownerName(userId)} leagues={leagues} selectedLeagueId={selected.id}
-    activeTab={tab} pageTitle={tab === 'team' ? selectedTeam?.team.name : undefined} isAdmin={isAdmin} isManager={Boolean(managerData)}>
+    activeTab={tab} raceId={races.find((race)=>race.id===Number(params.race))?.id} pageTitle={tab === 'team' ? selectedTeam?.team.name : undefined} isAdmin={isAdmin} isManager={Boolean(managerData)}>
         <section className="min-w-0 space-y-6">
           <div><p className="text-xs font-bold uppercase tracking-widest text-red-600">Stagione 2026 · {leagueStatusLabel(selected.status)}</p>
             <h1 className="mt-1 break-words text-3xl font-black sm:text-4xl">{selected.name}</h1>
@@ -177,7 +185,9 @@ export default async function HomePage({ searchParams }: {
             {weekend&&<WeekendCenter key={weekend.id} race={weekend} sessions={(sessionsData??[]) as RaceSession[]} initialNow={now} leagueId={selected.id} active={selected.status==='active'} hasTeam={Boolean(myTeam)}>
               {myTeam&&<LineupSummary teamName={myTeam.name} lineup={lineups.find((lineup)=>lineup.fantasy_team_id===myTeam.id&&lineup.race_id===weekend.id)} driverName={driverName} constructorName={constructorName(myTeam.constructor_id)} closed={Boolean(weekend.lineup_deadline_at&&now>=Date.parse(weekend.lineup_deadline_at))} />}
             </WeekendCenter>}
-            <LeagueDashboard entries={standings} leagueId={selected.id} />
+            {weekend&&<div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-4"><p className="text-sm"><strong>{submissions.filter((row)=>row.race_id===weekend.id&&row.is_submitted).length}/{teams.length}</strong> formazioni consegnate</p><Link href={url(selected.id,'lineups',weekend.id)} className="min-h-11 py-3 text-sm font-bold text-red-600">Vedi le formazioni della lega</Link></div>}
+            <LeagueDashboard entries={standings} leagueId={selected.id} compact />
+            <Link href={url(selected.id,'analytics')} className="min-h-11 py-3 text-sm font-bold text-red-600">Esplora le statistiche della lega</Link>
           </>}
 
           {tab==='history'&&<>{weekend&&<RacePicker races={races} value={weekend.id} href={url(selected.id,'history')} />}<ChangeHistory key={weekend?.id} entries={history} /></>}
@@ -185,9 +195,18 @@ export default async function HomePage({ searchParams }: {
           {tab === 'team' && (selectedTeam ? <TeamDashboard entry={selectedTeam} leagueId={selected.id}
             owner={ownerName(selectedTeam.team.user_id)} leaderPoints={standings[0]?.points ?? 0}
             roster={[selectedTeam.team.driver_one_id, selectedTeam.team.driver_two_id, selectedTeam.team.driver_three_id].map(driverName)}
-            constructor={constructorName(selectedTeam.team.constructor_id)} />
+            constructor={constructorName(selectedTeam.team.constructor_id)} rankDelta={standingRows.find((row)=>row.team.id===selectedTeam.team.id)?.rankDelta} gapToNext={standingRows.find((row)=>row.team.id===selectedTeam.team.id)?.gapToNext} />
             : <Card title={params.team ? 'Squadra non trovata' : 'Squadra in attesa'}><p className="text-sm text-zinc-500">{params.team ? 'Questa squadra non è presente nella lega.' : 'La tua squadra non è ancora stata assegnata.'}</p></Card>)}
 
+          {['lineup','lineups'].includes(tab)&&<>
+            <nav aria-label="Viste formazione" className="flex flex-wrap gap-2">{[{id:'lineup',label:'La mia formazione'},{id:'lineups',label:'Formazioni della lega'}].map(({id,label})=><Link key={id} href={url(selected.id,id,raceForLineup?.id)} aria-current={tab===id?'page':undefined} className={`min-h-11 rounded-xl border px-4 py-3 text-sm font-bold ${tab===id?'border-zinc-950 bg-zinc-950 text-white':'border-zinc-200 bg-white text-zinc-600'}`}>{label}</Link>)}</nav>
+            {raceForLineup?.lineup_deadline_at&&!lineupClosed(raceForLineup.lineup_deadline_at,now)&&<DeadlineRefresh deadline={raceForLineup.lineup_deadline_at}/>}
+          </>}
+          {tab === 'lineups' && <>
+            {raceForLineup&&<><RacePicker races={races} value={raceForLineup.id} href={url(selected.id,'lineups')}/>
+              <LeagueLineups race={raceForLineup} leagueId={selected.id} teams={teams} lineups={lineups} statuses={submissions} viewerId={userId} now={now} driverName={driverName} constructorName={constructorName} ownerName={ownerName}
+                gpResults={gpResults.filter((row)=>row.race_id===raceForLineup.id)} sprintResults={sprintResults.filter((row)=>row.race_id===raceForLineup.id)} pit={pitResults.find((row)=>row.race_id===raceForLineup.id&&row.fastest_pit_stop)?.constructor_id??null} rules={rules} filter={['submitted','missing'].includes(params.delivery??'')?params.delivery!:'all'}/></>}
+          </>}
           {tab === 'lineup' && <>
             {raceForLineup && <RacePicker races={races} value={raceForLineup.id} href={url(selected.id, 'lineup')} />}
             {raceForLineup && <Card title={`${raceForLineup.name} · ${dateLabel(raceForLineup.race_date)}`}>
@@ -214,13 +233,7 @@ export default async function HomePage({ searchParams }: {
 
           {tab === 'standings' && <Card title={`Classifica ${provisional ? '· provvisoria' : ''}`}>
             {!rules && <p className="text-amber-700">Regole di punteggio non ancora disponibili per questa stagione.</p>}
-            <div className="mt-4 divide-y divide-zinc-100">{standings.map((entry) =>
-              <div key={entry.team.id} className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-2 py-4 sm:gap-3">
-                <span className="font-black text-zinc-400">{1 + standings.filter((other) => other.points > entry.points).length}°</span>
-                <Link href={`/home?league=${selected.id}&tab=team&team=${entry.team.id}`} className="min-w-0 break-words rounded-lg py-1 hover:text-red-600 [&>span]:flex [&>span]:flex-col [&>span]:items-start [&>span]:gap-0.5"><span className="font-bold">{entry.team.name}</span><span className="text-sm text-zinc-500">{ownerName(entry.team.user_id)}</span></Link>
-                <strong>{entry.points} pt</strong>
-              </div>)}</div>
-            {!standings.length && <p className="text-zinc-500">Le squadre non sono ancora state assegnate.</p>}
+            <div className="mt-4"><StandingsBoard entries={standings} leagueId={selected.id} ownerName={ownerName}/></div>
           </Card>}
 
           {tab === 'results' && (raceForResults ? <RaceResults race={raceForResults} races={races} leagueId={selected.id}
@@ -228,8 +241,7 @@ export default async function HomePage({ searchParams }: {
             gpResults={gpResults} sprintResults={sprintResults} pitResults={pitResults} rules={rules} />
             : <Card title="Risultati"><p>Il calendario non è ancora disponibile.</p></Card>)}
 
-          {tab === 'analytics' && <><LeagueDashboard entries={standings} leagueId={selected.id} />
-            <AdvancedDashboard data={buildAdvancedStats({ entries: standings, races, lineups, gpResults, sprintResults, pitResults, rules })} drivers={drivers} /></>}
+          {tab === 'analytics' && <AdvancedDashboard data={buildAdvancedStats({ entries: standings, races, lineups, gpResults, sprintResults, pitResults, rules })} entries={standings} drivers={drivers} constructors={constructorRows} leagueId={selected.id} initialTeamId={params.team??myTeam?.id} initialRaceId={Number(params.race)||undefined} />}
 
           {tab === 'manage' && isAdmin && <>
             <div>

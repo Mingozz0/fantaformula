@@ -142,7 +142,7 @@ export function ResultsEditor({ raceId, event, userId, drivers, constructors, re
       onChange={(value) => update({ ...payload, drivers: payload.drivers.map((row) => row.driver_id === driver.id ? { ...value, driver_id: driver.id } : row) })}
       errors={errors.filter((error) => error.driverId === driver.id)} />)}</div>
     </fieldset>
-    <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-sm backdrop-blur-sm">
+    <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white/95 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-sm backdrop-blur-sm md:bottom-0">
       <p role="status" className="w-full text-xs text-zinc-500">{saving ? 'Salvataggio bozza…' : dirty ? 'Modifiche da salvare' : savedAt ? `Bozza salvata · ${new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' }).format(new Date(savedAt))}` : 'Nessuna bozza salvata'}</p>
       <button type="submit" disabled={saving || publishing || (!dirty && savedVersion > 0)} className="min-h-11 flex-1 rounded-xl border border-zinc-300 px-4 text-sm font-bold disabled:opacity-50">Salva bozza</button>
       <button type="button" onClick={() => void publish()} disabled={saving || publishing || alreadyPublished} className="min-h-11 flex-1 rounded-xl bg-red-600 px-4 text-sm font-bold text-white disabled:opacity-50">{publishing ? 'Pubblicazione…' : alreadyPublished ? 'Pubblicati' : 'Pubblica risultati'}</button>

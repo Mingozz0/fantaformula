@@ -11,21 +11,22 @@ import { signOut } from '@/app/home/actions';
 
 export type PortalLeague = { id: string; name: string; status: string };
 type ShellProps = { children: ReactNode; name: string; leagues: PortalLeague[];
-  selectedLeagueId?: string; activeTab: string; isAdmin: boolean; isManager: boolean; defaultOpen?: boolean; pageTitle?: string };
+  selectedLeagueId?: string; activeTab: string; isAdmin: boolean; isManager: boolean; defaultOpen?: boolean; pageTitle?: string; raceId?: number };
 
 const sections = [
   { id: 'overview', label: 'Panoramica', icon: House },
   { id: 'team', label: 'La mia squadra', icon: Users },
   { id: 'lineup', label: 'Formazione', icon: ClipboardList },
+  { id: 'lineups', label: 'Formazioni della lega', icon: Users },
   { id: 'standings', label: 'Classifica', icon: Trophy },
   { id: 'results', label: 'Risultati', icon: Flag },
   { id: 'analytics', label: 'Statistiche avanzate', icon: BarChart3 },
 ];
 
-function PortalSidebar({ name, leagues, selectedLeagueId, activeTab, isAdmin, isManager }: Omit<ShellProps, 'children' | 'defaultOpen'>) {
+function PortalSidebar({ name, leagues, selectedLeagueId, activeTab, isAdmin, isManager, raceId }: Omit<ShellProps, 'children' | 'defaultOpen'>) {
   const { setOpenMobile } = useSidebar();
   const selected = leagues.find((league) => league.id === selectedLeagueId);
-  const href = (tab: string) => selectedLeagueId ? `/home?${new URLSearchParams({ league: selectedLeagueId, tab })}` : '/home';
+  const href = (tab: string) => selectedLeagueId ? `/home?${new URLSearchParams({ league: selectedLeagueId, tab, ...(raceId?{race:String(raceId)}:{}) })}` : '/home';
   const closeMenu = () => setOpenMobile(false);
   return <Sidebar collapsible="offcanvas" className="border-sidebar-border">
     <SidebarHeader className="gap-6 px-5 pb-5 pt-6">
@@ -89,7 +90,10 @@ export function PortalShell({ children, defaultOpen = true, pageTitle, ...props 
         <div className="flex min-w-0 items-center gap-3"><SidebarTrigger className="size-11 rounded-xl" aria-label="Apri o chiudi il menu" /><span aria-hidden="true" className="h-5 w-px bg-zinc-200" /><p className="truncate text-sm font-semibold">{title}</p></div>
         <div className="flex min-w-0 items-center gap-3"><span className="hidden max-w-48 truncate text-sm text-zinc-600 sm:block">{props.name}</span><span aria-label={`Account di ${props.name}`} className="grid size-9 shrink-0 place-items-center rounded-full border border-zinc-200 bg-white text-xs font-bold">{initials}</span></div>
       </header>
-      <div id="contenuto" className="mx-auto w-full min-w-0 max-w-6xl space-y-6 p-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:p-6 lg:p-8">{children}</div>
+      <div id="contenuto" className={`mx-auto w-full min-w-0 max-w-6xl space-y-6 p-4 sm:p-6 lg:p-8 ${props.selectedLeagueId?'pb-[calc(5.5rem+env(safe-area-inset-bottom))] sm:pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-8':'pb-[max(1.5rem,env(safe-area-inset-bottom))]'}`}>{children}</div>
+      {props.selectedLeagueId&&<nav aria-label="Navigazione rapida" className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 border-t border-zinc-200 bg-white/95 px-2 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm md:hidden">{[
+        {id:'lineup',label:'Formazione',icon:ClipboardList},{id:'standings',label:'Classifica',icon:Trophy},{id:'results',label:'Risultati',icon:Flag},
+      ].map(({id,label,icon:Icon})=>{const active=props.activeTab===id||id==='lineup'&&props.activeTab==='lineups';return <NavigationLink key={id} href={`/home?${new URLSearchParams({league:props.selectedLeagueId!,tab:id,...(props.raceId?{race:String(props.raceId)}:{})})}`} aria-current={active?'page':undefined} className={`flex min-h-16 items-center justify-center rounded-xl py-2 text-[11px] font-bold [&>span]:flex-col [&>span]:gap-1.5 ${active?'text-red-600':'text-zinc-500'}`}><Icon aria-hidden className="size-5"/>{label}</NavigationLink>;})}</nav>}
     </SidebarInset>
   </SidebarProvider>;
 }
