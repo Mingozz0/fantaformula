@@ -32,7 +32,7 @@ export function ResultImportPanel({ raceId, event, drivers, disabled, onApply }:
       </button>
     </div>
     {preview && <div className="space-y-4" aria-live="polite">
-      <div className="flex items-center justify-between gap-3"><h4 className="text-sm font-bold">Anteprima · {preview.drivers.length} di {drivers.length} piloti associati</h4>
+      <div className="flex items-center justify-between gap-3"><h4 className="text-sm font-bold">Anteprima · {preview.drivers.filter((row)=>row.result_status!=='not_entered').length} partecipanti associati{preview.drivers.some((row)=>row.result_status==='not_entered')&&` · ${preview.drivers.filter((row)=>row.result_status==='not_entered').length} non iscritti`}</h4>
         <button type="button" onClick={() => setPreview(null)} aria-label="Chiudi anteprima" className="grid size-11 shrink-0 place-items-center rounded-lg hover:bg-zinc-200"><X aria-hidden className="size-4" /></button></div>
       <div className="max-h-80 overflow-auto rounded-lg border border-zinc-200 bg-white" tabIndex={0} role="region" aria-label="Risultati da importare">
         <table className="w-full text-left text-xs"><thead className="sticky top-0 bg-zinc-100 text-zinc-600"><tr>

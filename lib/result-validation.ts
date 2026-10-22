@@ -5,8 +5,11 @@ export type PositionError = { driverId: number; field: 'grid' | 'finish' | 'stat
 export function validatePositions(rows: PositionRow[], complete = true): PositionError[] {
   const errors: PositionError[] = [];
   for (const row of rows) {
-    if (!['finished', 'dnf', 'dns', 'dsq'].includes(row.result_status)) {
+    if (!['finished', 'dnf', 'dns', 'dsq', 'not_entered'].includes(row.result_status)) {
       errors.push({ driverId: row.driver_id, field: 'status', message: `${row.name}: seleziona un esito valido.` });
+    }
+    if (row.result_status === 'not_entered' && row.grid_position !== null) {
+      errors.push({ driverId: row.driver_id, field: 'grid', message: `${row.name}: un pilota non iscritto non ha una posizione in griglia.` });
     }
     if (complete && row.result_status === 'finished' && row.finish_position === null) {
       errors.push({ driverId: row.driver_id, field: 'finish', message: `${row.name}: inserisci la posizione all’arrivo.` });

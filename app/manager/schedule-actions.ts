@@ -11,7 +11,7 @@ export async function syncWeekendSchedule(raceId: number): Promise<{ok:true;coun
     if(!auth?.claims?.sub)return {ok:false,error:'Sessione scaduta. Accedi di nuovo.'};
     const {data:manager,error:managerError}=await db.from('game_managers').select('user_id').eq('user_id',auth.claims.sub).maybeSingle();
     if(managerError || !manager)return {ok:false,error:'Solo il gestore può aggiornare gli orari.'};
-    const {data:race,error:raceError}=await db.from('races').select('id,season_id,round,circuit,race_date,has_sprint').eq('id',raceId).single();
+    const {data:race,error:raceError}=await db.from('races').select('id,season_id,round,circuit,external_circuit_id,race_date,has_sprint').eq('id',raceId).single();
     if(raceError || !race)return {ok:false,error:'Gara non trovata.'};
     const {data:season,error:seasonError}=await db.from('seasons').select('year').eq('id',race.season_id).single();
     if(seasonError || !season)return {ok:false,error:'Stagione non disponibile.'};

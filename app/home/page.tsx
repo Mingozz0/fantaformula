@@ -33,7 +33,7 @@ type Team = { id: string; league_id: string; user_id: string; name: string; cons
 type TeamDraft = { id: string; league_id: string; player_name: string; name: string; constructor_id: number;
   driver_one_id: number; driver_two_id: number; driver_three_id: number };
 type Driver = { id: number; first_name: string; last_name: string };
-type SeasonDriver = { driver_id: number; drivers: Driver };
+type SeasonDriver = { driver_id: number; is_replacement: boolean; drivers: Driver };
 type Race = WeekendRace;
 type Lineup = FantasyLineup & { id: string; fantasy_team_id: string; race_id: number; retroactive: boolean; submitted_at: string };
 type Pit = { race_id: number; constructor_id: number; fastest_pit_stop: boolean };
@@ -99,7 +99,7 @@ export default async function HomePage({ searchParams }: {
   const leagueData = await Promise.all([
     supabase.from('league_members').select('user_id,role').eq('league_id', selected.id),
     supabase.from('fantasy_teams').select('*').eq('league_id', selected.id),
-    needsDrivers ? supabase.from('season_drivers').select('driver_id,drivers!inner(id,first_name,last_name)')
+    needsDrivers ? supabase.from('season_drivers').select('driver_id,is_replacement,drivers!inner(id,first_name,last_name)')
       .eq('season_id', selected.season_id) : emptyRows,
     needsConstructors ? supabase.from('season_constructors').select('constructor_id,display_name')
       .eq('season_id', selected.season_id) : emptyRows,
@@ -126,6 +126,7 @@ export default async function HomePage({ searchParams }: {
   const { data: profilesData } = profilesResult;
   const profiles = (profilesData ?? []) as Profile[];
   const drivers = ((seasonDriversData ?? []) as unknown as SeasonDriver[]).map((row) => row.drivers);
+  const rosterDrivers = ((seasonDriversData ?? []) as unknown as SeasonDriver[]).filter((row) => !row.is_replacement).map((row) => row.drivers);
   const lineups = (lineupsData ?? []) as Lineup[];
   const gpResults = (gpData ?? []) as RaceResult[];
   const sprintResults = (sprintData ?? []) as RaceResult[];
@@ -238,7 +239,7 @@ export default async function HomePage({ searchParams }: {
             </div>
             <Card title="Prepara una squadra">
               <p className="mb-5 text-sm text-zinc-600">Inserisci il nome del partecipante e scegli la rosa. Puoi farlo anche prima che entri nella lega.</p>
-              <TeamDraftForm leagueId={selected.id} drivers={drivers} constructorRows={constructorRows}
+              <TeamDraftForm leagueId={selected.id} drivers={rosterDrivers} constructorRows={constructorRows}
                 driverName={driverName} />
             </Card>
             <Card title={`Squadre da assegnare (${drafts.length})`}>
@@ -263,7 +264,7 @@ export default async function HomePage({ searchParams }: {
                 {!membersWithoutTeam.length && <p className="mt-3 text-sm text-zinc-500">Per assegnarla, il partecipante deve entrare nella lega con il codice invito.</p>}
                 <details className="mt-4 border-t border-zinc-200 pt-4">
                   <summary className="cursor-pointer text-sm font-semibold text-red-700">Modifica squadra</summary>
-                  <div className="mt-4"><TeamDraftForm leagueId={selected.id} draft={draft} drivers={drivers}
+                  <div className="mt-4"><TeamDraftForm leagueId={selected.id} draft={draft} drivers={rosterDrivers}
                     constructorRows={constructorRows} driverName={driverName} /></div>
                 </details>
               </div>)}</div>

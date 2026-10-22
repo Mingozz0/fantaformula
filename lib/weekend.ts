@@ -2,7 +2,7 @@ export const sessionLabels = { fp1: 'Prove libere 1', fp2: 'Prove libere 2', fp3
   sprint_qualifying: 'Qualifiche Sprint', sprint: 'Sprint', qualifying: 'Qualifiche', race: 'Gran Premio' } as const;
 export type SessionKey = keyof typeof sessionLabels;
 export type RaceSession = { race_id: number; session_key: SessionKey; starts_at: string; source_url: string; synced_at: string };
-export type WeekendRace = { id: number; round: number; name: string; circuit: string; race_date: string | null;
+export type WeekendRace = { id: number; round: number; name: string; circuit: string; external_circuit_id?: string | null; race_date: string | null;
   race_starts_at: string | null; sprint_starts_at: string | null; sprint_qualifying_starts_at: string | null;
   lineup_deadline_at: string | null; has_sprint: boolean; gp_published: boolean; sprint_published: boolean };
 export function romeDate(now: number) {

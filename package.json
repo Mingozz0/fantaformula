@@ -10,6 +10,7 @@
     "test:scoring": "node scripts/test-scoring.mjs",
     "test:portal": "node scripts/test-portal.mjs",
     "test:lineups": "node scripts/test-lineups.mjs",
+    "test:participation": "node scripts/test-participation.mjs",
     "test:imports": "node scripts/test-result-import.mjs",
     "test:weekend": "node scripts/test-weekend.mjs"
   },

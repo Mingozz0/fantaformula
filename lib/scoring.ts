@@ -51,6 +51,7 @@ export type ScoreBreakdown = { total: number; components: ScoreComponent[]; expl
 
 export function explainDriverScore(result: DriverResult | undefined, rules: ScoringRules, sprint: boolean): ScoreBreakdown {
   if (!result) return { total: 0, components: [], explanation: 'Risultato del pilota non disponibile.' };
+  if (result.result_status === 'not_entered') return { total: 0, components: [], explanation: 'Non iscritto a questa gara: subentra la riserva se era titolare.' };
   if (result.result_status === 'dns') return { total: 0, components: [], explanation: 'Non è partito: nessun punto.' };
   if (!result.formation_lap) return { total: 0, components: [], explanation: 'Non ha preso parte al giro di formazione: nessun punto.' };
   if (result.result_status === 'dnf' || result.result_status === 'dsq') {
@@ -106,7 +107,7 @@ export function scoreEvent(
   let reserveUsed = false;
   for (let i = 0; i < selected.length; i++) {
     const result = byDriver.get(selected[i]);
-    if (result?.result_status === 'dns' || result?.formation_lap === false) {
+    if (result?.result_status === 'not_entered' || result?.result_status === 'dns' || result?.formation_lap === false) {
       selected[i] = lineup.reserve_driver_id;
       reserveUsed = true;
       break;

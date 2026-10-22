@@ -3,7 +3,7 @@ export function leagueStatusLabel(status: string) {
 }
 
 export function driverStatusLabel(status: string) {
-  return ({ finished: 'Arrivato', dnf: 'Ritirato', dns: 'Non partito', dsq: 'Squalificato', other: 'Altro esito' } as Record<string, string>)[status] ?? 'Da verificare';
+  return ({ finished: 'Arrivato', dnf: 'Ritirato', dns: 'Non partito', not_entered: 'Non iscritto', dsq: 'Squalificato', other: 'Altro esito' } as Record<string, string>)[status] ?? 'Da verificare';
 }
 
 export function signedPoints(value: number) {

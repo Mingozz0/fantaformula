@@ -18,5 +18,6 @@ export function isDraftPayload(value: unknown): value is DraftPayload {
     && [payload.fastest_driver_id,payload.dotd_driver_id,payload.pit_constructor_id].every(numeric)
     && payload.drivers.every((row) => row && Number.isSafeInteger(row.driver_id) && row.driver_id > 0
       && numeric(row.constructor_id) && numeric(row.grid_position) && numeric(row.finish_position)
-      && ['finished','dnf','dns','dsq'].includes(row.result_status) && typeof row.formation_lap === 'boolean');
+      && ['finished','dnf','dns','dsq','not_entered'].includes(row.result_status) && typeof row.formation_lap === 'boolean'
+      && (row.result_status !== 'not_entered' || row.grid_position === null && row.finish_position === null && !row.formation_lap));
 }

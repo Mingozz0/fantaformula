@@ -11,7 +11,7 @@ import { ResultImportPanel } from './result-import-panel';
 import { mergeResultImport, type ResultImport } from '@/lib/result-import';
 import { toast } from 'sonner';
 
-type EditorDriver = { id: number; name: string; constructorId: number };
+type EditorDriver = { id: number; name: string; constructorId: number; isReplacement?: boolean };
 export type EditorResult = EditableDriverResult & { driver_id: number; fastest_lap: boolean; driver_of_the_day?: boolean };
 
 export function ResultsEditor({ raceId, event, userId, drivers, constructors, results, pitId, draft, published = false }: {
@@ -22,7 +22,7 @@ export function ResultsEditor({ raceId, event, userId, drivers, constructors, re
   const [payload, setPayload] = useState<DraftPayload>(() => ({ drivers: drivers.map((driver) => {
     const saved = draft?.payload.drivers.find((result) => result.driver_id === driver.id) ?? results.find((result) => result.driver_id === driver.id);
     return { driver_id: driver.id, constructor_id: saved?.constructor_id ?? driver.constructorId, grid_position: saved?.grid_position ?? null,
-      finish_position: saved?.finish_position ?? null, result_status: saved?.result_status ?? 'finished', formation_lap: saved?.formation_lap ?? true };
+      finish_position: saved?.finish_position ?? null, result_status: saved?.result_status ?? (driver.isReplacement ? 'not_entered' : 'finished'), formation_lap: saved?.formation_lap ?? !driver.isReplacement };
   }), fastest_driver_id: draft ? draft.payload.fastest_driver_id : results.find((row) => row.fastest_lap)?.driver_id ?? null,
     dotd_driver_id: draft ? draft.payload.dotd_driver_id : results.find((row) => row.driver_of_the_day)?.driver_id ?? null,
     pit_constructor_id: draft ? draft.payload.pit_constructor_id : pitId ?? null, ...(draft?.payload.imported ? { imported: draft.payload.imported } : {}) }));
@@ -43,6 +43,9 @@ export function ResultsEditor({ raceId, event, userId, drivers, constructors, re
   const initialVersion = draft?.version ?? 0;
 
   function update(next: DraftPayload) {
+    const unavailable = new Set(next.drivers.filter((row) => ['dns','not_entered'].includes(row.result_status)).map((row) => row.driver_id));
+    next = { ...next, fastest_driver_id: next.fastest_driver_id && unavailable.has(next.fastest_driver_id) ? null : next.fastest_driver_id,
+      dotd_driver_id: next.dotd_driver_id && unavailable.has(next.dotd_driver_id) ? null : next.dotd_driver_id };
     current.current = next; setPayload(next);
     try { sessionStorage.setItem(storageKey, JSON.stringify({ version: version.current, payload: next })); } catch { /* Server save remains available. */ }
   }
@@ -109,11 +112,12 @@ export function ResultsEditor({ raceId, event, userId, drivers, constructors, re
     } catch { toast.error('Pubblicazione non riuscita. La bozza è conservata: riprova.'); }
     finally { setPublishing(false); }
   }
-  const options = drivers.map((driver) => ({ value: driver.id, label: driver.name }));
+  const options = drivers.map((driver) => ({ value: driver.id, label: driver.name,
+    disabled: payload.drivers.some((row) => row.driver_id === driver.id && ['not_entered','dns'].includes(row.result_status)) }));
   const alreadyPublished = isPublished && !dirty && (savedVersion === 0 || publishedVersion === savedVersion);
   const missingImportFields = [!payload.fastest_driver_id && 'giro veloce',
     event === 'gp' && !payload.dotd_driver_id && 'pilota del giorno', event === 'gp' && !payload.pit_constructor_id && 'migliore sosta ai box',
-    ...drivers.filter((driver) => payload.drivers.some((row) => row.driver_id === driver.id && row.grid_position === null && row.result_status !== 'dns')).map((driver) => `griglia di ${driver.name}`),
+    ...drivers.filter((driver) => payload.drivers.some((row) => row.driver_id === driver.id && row.grid_position === null && !['dns','not_entered'].includes(row.result_status))).map((driver) => `griglia di ${driver.name}`),
   ].filter(Boolean);
   function applyImport(imported: ResultImport) {
     const next = mergeResultImport(current.current, imported);

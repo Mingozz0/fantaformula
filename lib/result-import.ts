@@ -92,8 +92,15 @@ export function parseResultImport(data: unknown, year: number, round: number, ev
       fastest = driver.id;
     }
   }
-  for (const driver of drivers) if (!matched.has(driver.id)) warnings.push(`${driver.first_name} ${driver.last_name}: risultato assente. Dati attuali conservati.`);
   if (!imported.length) throw new Error('Nessun risultato associabile ai piloti della stagione. Importazione annullata.');
+  // Only a complete, fully mapped classification can establish who was not entered.
+  // A partial response must never clear a valid result or activate a fantasy reserve.
+  const complete = imported.length === externalRows.length && externalRows.length === constructors.length * 2;
+  for (const driver of drivers) if (!matched.has(driver.id)) {
+    if (complete) imported.push({ driver_id: driver.id, constructor_id: driver.constructor_id,
+      grid_position: null, finish_position: null, result_status: 'not_entered', formation_lap: false });
+    else warnings.push(`${driver.first_name} ${driver.last_name}: risultato assente. Dati attuali conservati.`);
+  }
   if (!fastest) warnings.push('Giro veloce non disponibile: verifica o completa il bonus.');
   for (const key of ['grid_position', 'finish_position'] as const) {
     const positions = imported.map((row) => row[key]).filter((value) => value !== null);
@@ -105,6 +112,10 @@ export function parseResultImport(data: unknown, year: number, round: number, ev
 
 export function mergeResultImport(payload: DraftPayload, imported: ResultImport): DraftPayload {
   const byDriver = new Map(imported.drivers.map((driver) => [driver.driver_id, driver]));
-  return { ...payload, drivers: payload.drivers.map((driver) => byDriver.get(driver.driver_id) ?? driver),
-    fastest_driver_id: imported.fastest_driver_id ?? payload.fastest_driver_id, imported: imported.source };
+  const existing = new Set(payload.drivers.map((driver) => driver.driver_id));
+  const bonus = (id: number | null) => id && byDriver.get(id)?.result_status === 'not_entered' ? null : id;
+  return { ...payload, drivers: [...payload.drivers.map((driver) => byDriver.get(driver.driver_id) ?? driver),
+    ...imported.drivers.filter((driver) => !existing.has(driver.driver_id))],
+    fastest_driver_id: imported.fastest_driver_id ?? bonus(payload.fastest_driver_id),
+    dotd_driver_id: bonus(payload.dotd_driver_id), imported: imported.source };
 }

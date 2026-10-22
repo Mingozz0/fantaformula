@@ -15,14 +15,16 @@ export async function fetchCalendar(year: number): Promise<unknown> {
   if (!response.ok) throw new Error(response.status === 429 ? 'Troppe richieste al calendario. Riprova più tardi.' : 'Calendario temporaneamente non disponibile.');
   try { return await response.json(); } catch { throw new Error('Risposta del calendario non valida.'); }
 }
-export function parseSchedule(data: unknown, year: number, race: Pick<WeekendRace,'id'|'round'|'circuit'|'race_date'|'has_sprint'>): ScheduleImport {
+export function parseSchedule(data: unknown, year: number, race: Pick<WeekendRace,'id'|'round'|'circuit'|'external_circuit_id'|'race_date'|'has_sprint'>): ScheduleImport {
   const mr = object(object(data).MRData);
   const rows = object(mr.RaceTable).Races;
   if (!Array.isArray(rows) || Number(mr.total) !== rows.length) throw new Error('Calendario incompleto. Nessun orario modificato.');
   const found = rows.map(object).filter((row) => Number(row.season) === year && Number(row.round) === race.round);
   if (found.length !== 1) throw new Error('Gara non trovata nel calendario.');
   const row = found[0];
-  if (normalize(text(object(row.Circuit).circuitName)) !== normalize(race.circuit)) throw new Error('Circuito diverso dal catalogo: verifica la gara prima di aggiornare gli orari.');
+  const circuit = object(row.Circuit);
+  if (race.external_circuit_id ? text(circuit.circuitId) !== race.external_circuit_id
+    : normalize(text(circuit.circuitName)) !== normalize(race.circuit)) throw new Error('Circuito diverso dal catalogo: verifica la gara prima di aggiornare gli orari.');
   if (!race.race_date || Math.abs(Date.parse(text(row.date))-Date.parse(race.race_date)) > 86400000) throw new Error('Data della gara diversa dal catalogo. Nessun orario modificato.');
   const sessions: ScheduleImport['sessions'] = [];
   for (const [field, key] of [['FirstPractice','fp1'],['SecondPractice','fp2'],['ThirdPractice','fp3'],['SprintQualifying','sprint_qualifying'],['Sprint','sprint'],['Qualifying','qualifying'],['Race','race']] as const) {

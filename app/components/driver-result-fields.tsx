@@ -19,6 +19,7 @@ export function DriverResultFields({ driverId, name, constructors, value, onChan
     <div className="grid grid-cols-2 gap-3">
       <label className="min-w-0 text-sm font-semibold text-zinc-700">Posizione in griglia
         <input type="number" inputMode="numeric" min={1} max={30} step={1} name={`grid_${driverId}`} value={value.grid_position ?? ''}
+          disabled={value.result_status === 'not_entered'}
           onChange={(event) => onChange({ ...value, grid_position: event.target.value === '' ? null : Number(event.target.value) })}
           aria-invalid={Boolean(gridError)} aria-describedby={gridError ? `grid-error-${driverId}` : undefined}
           placeholder="Es. 3" className="mt-1.5 h-11 w-full rounded-xl border border-zinc-200 bg-white px-3 text-base shadow-xs aria-invalid:border-red-500" />
@@ -35,9 +36,10 @@ export function DriverResultFields({ driverId, name, constructors, value, onChan
     </div>
     <FormSelect label="Esito della gara" name={`status_${driverId}`} value={value.result_status}
       onValueChange={(status) => onChange({ ...value, result_status: status, finish_position: status === 'finished' ? value.finish_position : null,
-        formation_lap: status === 'dns' ? false : value.result_status === 'dns' ? true : value.formation_lap })}
-      options={[{ value: 'finished', label: 'Arrivato' }, { value: 'dnf', label: 'Ritirato' }, { value: 'dns', label: 'Non partito' }, { value: 'dsq', label: 'Squalificato' }]} />
-    {value.result_status === 'dns' ? <p className="flex min-h-11 items-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">Non partito (DNS): subentra la riserva</p> : <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700">
+        grid_position: status === 'not_entered' ? null : value.grid_position,
+        formation_lap: ['dns','not_entered'].includes(status) ? false : ['dns','not_entered'].includes(value.result_status) ? true : value.formation_lap })}
+      options={[{ value: 'finished', label: 'Arrivato' }, { value: 'dnf', label: 'Ritirato' }, { value: 'dns', label: 'Non partito' }, { value: 'not_entered', label: 'Non iscritto / sostituito' }, { value: 'dsq', label: 'Squalificato' }]} />
+    {['dns','not_entered'].includes(value.result_status) ? <p className="flex min-h-11 items-center rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">{value.result_status === 'not_entered' ? 'Non iscritto: subentra la riserva se era titolare' : 'Non partito (DNS): subentra la riserva'}</p> : <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700">
       <input type="checkbox" name={`formation_${driverId}`} checked={value.formation_lap}
         onChange={(event) => onChange({ ...value, formation_lap: event.target.checked })} className="size-5 shrink-0 accent-red-600" />
       Ha partecipato al giro di formazione

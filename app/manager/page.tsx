@@ -45,7 +45,7 @@ export default async function ManagerPage({ searchParams }: {
   const managerUrl = (race?: number, event = 'gp') => `/manager?${new URLSearchParams({ ...(league ? { league: league.id } : {}), ...(race ? { race: String(race) } : {}), event })}`;
   const catalog = await Promise.all([
     supabase.from('races').select('*').eq('season_id', season.id).order('round'),
-    supabase.from('season_drivers').select('driver_id,constructor_id').eq('season_id', season.id),
+    supabase.from('season_drivers').select('driver_id,constructor_id,is_replacement').eq('season_id', season.id),
     supabase.from('season_constructors').select('constructor_id,display_name').eq('season_id', season.id),
   ]);
   catalog.forEach((result) => assertQuery(result, 'Impossibile caricare il calendario'));
@@ -95,7 +95,7 @@ export default async function ManagerPage({ searchParams }: {
         {draft && draft.version > draft.published_version && <p className="mt-3 text-xs font-semibold text-amber-700">Bozza da pubblicare</p>}
         <ResultsEditor key={`${selected.id}-${event}`} raceId={selected.id} event={event} userId={userId} draft={draft ?? undefined}
           published={event === 'gp' ? selected.gp_published : selected.sprint_published}
-          drivers={roster.map((row) => ({ id: row.driver_id, name: driverName(row.driver_id), constructorId: row.constructor_id }))}
+          drivers={roster.map((row) => ({ id: row.driver_id, name: driverName(row.driver_id), constructorId: row.constructor_id, isReplacement: row.is_replacement }))}
           constructors={constructors} results={results} pitId={event === 'gp' ? pitId : undefined} />
       </div><ChangeHistory key={`${selected.id}-${event}`} entries={history} /></>}
   </PortalShell>;
