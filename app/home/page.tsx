@@ -87,7 +87,6 @@ export default async function HomePage({ searchParams }: {
 
   const isAdmin = memberships.some((membership) =>
     membership.league_id === selected.id && membership.role === 'admin');
-  if (tab === 'analytics' && !managerData) redirect(url(selected.id, 'overview'));
   if (tab === 'manage' && !isAdmin) redirect(url(selected.id, 'overview'));
   if (tab === 'history' && !isAdmin && !managerData) redirect(url(selected.id, 'overview'));
   const needsStats = ['overview', 'team', 'standings', 'analytics'].includes(tab);
@@ -229,7 +228,7 @@ export default async function HomePage({ searchParams }: {
             gpResults={gpResults} sprintResults={sprintResults} pitResults={pitResults} rules={rules} />
             : <Card title="Risultati"><p>Il calendario non è ancora disponibile.</p></Card>)}
 
-          {tab === 'analytics' && managerData && <><LeagueDashboard entries={standings} leagueId={selected.id} />
+          {tab === 'analytics' && <><LeagueDashboard entries={standings} leagueId={selected.id} />
             <AdvancedDashboard data={buildAdvancedStats({ entries: standings, races, lineups, gpResults, sprintResults, pitResults, rules })} drivers={drivers} /></>}
 
           {tab === 'manage' && isAdmin && <>

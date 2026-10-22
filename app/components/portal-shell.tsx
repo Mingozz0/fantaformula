@@ -19,6 +19,7 @@ const sections = [
   { id: 'lineup', label: 'Formazione', icon: ClipboardList },
   { id: 'standings', label: 'Classifica', icon: Trophy },
   { id: 'results', label: 'Risultati', icon: Flag },
+  { id: 'analytics', label: 'Statistiche avanzate', icon: BarChart3 },
 ];
 
 function PortalSidebar({ name, leagues, selectedLeagueId, activeTab, isAdmin, isManager }: Omit<ShellProps, 'children' | 'defaultOpen'>) {
@@ -65,9 +66,6 @@ function PortalSidebar({ name, leagues, selectedLeagueId, activeTab, isAdmin, is
           </SidebarMenuButton></SidebarMenuItem>}
           {isManager && <SidebarMenuItem><SidebarMenuButton asChild isActive={activeTab === 'manager'} className="h-11! rounded-xl px-3 font-medium data-[active=true]:bg-red-600 data-[active=true]:text-white">
             <NavigationLink href={selectedLeagueId ? `/manager?league=${selectedLeagueId}` : '/manager'} onClick={closeMenu} aria-current={activeTab === 'manager' ? 'page' : undefined}><Gauge className="size-4" /><span>Gestisci risultati</span></NavigationLink>
-          </SidebarMenuButton></SidebarMenuItem>}
-          {isManager && selected && <SidebarMenuItem><SidebarMenuButton asChild isActive={activeTab === 'analytics'} className="h-11! rounded-xl px-3 font-medium data-[active=true]:bg-red-600 data-[active=true]:text-white">
-            <NavigationLink href={href('analytics')} onClick={closeMenu} aria-current={activeTab === 'analytics' ? 'page' : undefined}><BarChart3 className="size-4" /><span>Statistiche avanzate</span></NavigationLink>
           </SidebarMenuButton></SidebarMenuItem>}
         </SidebarMenu></SidebarGroupContent>
       </SidebarGroup>}

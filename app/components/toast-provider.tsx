@@ -18,7 +18,7 @@ export function ToastProvider() {
     if (confirmationError) url.searchParams.delete('error');
     window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
   }, [params]);
-  return <Toaster position="top-center" richColors closeButton duration={5000} theme="light"
+  return <Toaster position="bottom-right" richColors closeButton duration={5000} theme="light"
     containerAriaLabel="Messaggi" toastOptions={{ closeButtonAriaLabel: 'Chiudi messaggio' }}
-    mobileOffset={{ top: 'max(16px, env(safe-area-inset-top))', left: 16, right: 16 }} />;
+    mobileOffset={{ bottom: 'max(16px, env(safe-area-inset-bottom))', left: 16, right: 16 }} />;
 }
